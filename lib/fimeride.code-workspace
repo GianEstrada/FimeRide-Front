@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "fimeride",
+			"path": ".."
+		},
+		{
+			"name": "assets",
+			"path": "../../../fimeride_front/assets"
+		}
+	],
+	"settings": {}
+}
