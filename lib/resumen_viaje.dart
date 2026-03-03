@@ -4,7 +4,6 @@ import 'package:fimeride_front/pagina_principal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,7 +20,7 @@ class ResumenViajeScreen extends StatefulWidget {
   final String fecha;
 
   const ResumenViajeScreen({
-    Key? key,
+    super.key,
     required this.startPoint,
     required this.endPoint,
     required this.direccionInicio,
@@ -32,7 +31,7 @@ class ResumenViajeScreen extends StatefulWidget {
     required this.horaLlegada,
     required this.asientosDisponibles,
     required this.fecha,
-  }) : super(key: key);
+  });
 
   @override
   _ResumenViajeScreenState createState() => _ResumenViajeScreenState(); // Devuelve la instancia del estado

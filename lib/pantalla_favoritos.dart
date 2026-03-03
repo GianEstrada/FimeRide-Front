@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:fimeride_front/configuracion_screen.dart';
 import 'package:fimeride_front/formulario_conductores.dart';
-import 'package:fimeride_front/chat_screen.dart';
 import 'package:fimeride_front/lista_mensajes_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -14,6 +13,8 @@ import 'info_viajes.dart';
 import 'ofercer_viaje.dart';
 
 class FavoritosScreen extends StatefulWidget {
+  const FavoritosScreen({super.key});
+
   @override
   _FavoritosScreenState createState() => _FavoritosScreenState();
 }
@@ -218,7 +219,7 @@ class _FavoritosScreenState extends State<FavoritosScreen> {
                               }
                             }
                               : null,
-                          activeColor: Colors.white,
+                          activeThumbColor: Colors.white,
                           activeTrackColor: Color.fromARGB(255, 0, 87, 54),
                           inactiveThumbColor: Colors.white,
                           inactiveTrackColor: Colors.white54,

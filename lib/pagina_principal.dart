@@ -17,6 +17,8 @@ import 'ofercer_viaje.dart';
 import 'viajes_recientes.dart';
 
 class PaginaPrincipal extends StatefulWidget {
+  const PaginaPrincipal({super.key});
+
   @override
   _PaginaPrincipalState createState() => _PaginaPrincipalState();
 }
@@ -238,6 +240,13 @@ Future<void> _fetchUsuarioInfo() async {
           conductorFoto: "https://example.com/foto.jpg",
           modeloVehiculo: "Toyota Corolla 2020",
           placasVehiculo: "ABC-1234",
+          mapboxAccessToken: "", 
+          /*
+          ejecutar flutter run --dart-define-from-file=.env 
+          teniendo este archivo en local con la key de la forma: 
+                mapboxAccessToken=tukey. 
+          para no tener que subir la key a github
+          */
         ),
       ),
     );
@@ -303,7 +312,7 @@ Future<void> _fetchUsuarioInfo() async {
                               }
                             }
                               : null,
-                          activeColor: Colors.white,
+                          activeThumbColor: Colors.white,
                           activeTrackColor: Color.fromARGB(255, 0, 87, 54),
                           inactiveThumbColor: Colors.white,
                           inactiveTrackColor: Colors.white54,
@@ -563,7 +572,7 @@ Future<void> _fetchUsuarioInfo() async {
                                   final int viajeId = viaje['id'];
                                   final Map<String, dynamic> conductor = viaje['conductor'];
 
-                                  if (conductor == null || conductor['id'] == null) {
+                                  if (conductor['id'] == null) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(content: Text("Error al obtener la información del conductor.")),
                                     );

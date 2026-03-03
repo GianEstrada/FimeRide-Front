@@ -5,7 +5,6 @@ import 'package:fimeride_front/info_perfil.dart';
 import 'package:fimeride_front/info_viajes.dart';
 import 'package:fimeride_front/lista_mensajes_screen.dart';
 import 'package:fimeride_front/pantalla_favoritos.dart';
-import 'package:fimeride_front/chat_screen.dart';
 import 'package:fimeride_front/resumen_viaje.dart';
 import 'package:fimeride_front/viajes_recientes.dart';
 import 'package:flutter/material.dart';
@@ -44,6 +43,7 @@ class _OfrecerViajeState extends State<OfercerViaje> {
 
   LatLng _currentLocation = LatLng(25.6866, -100.3161); // Coordenadas iniciales (Monterrey, NL)
   
+  @override
   void initState() {
   super.initState();
   _fetchUsuarioInfo();
@@ -487,7 +487,7 @@ int _convertHoraToMinutes(String hora) {
                                     _selectedHoraReloj = null;
                                   });
                                 },
-                                activeColor: Colors.white,
+                                activeThumbColor: Colors.white,
                                 activeTrackColor: Color.fromARGB(255, 0, 87, 54),
                                 inactiveThumbColor: Colors.white,
                                 inactiveTrackColor: Colors.white54,
@@ -544,7 +544,7 @@ int _convertHoraToMinutes(String hora) {
                               ),
                               const SizedBox(height: 8),
                               if (_suggestions.isNotEmpty)
-  Container(
+  SizedBox(
     height: 150,
     child: ListView.builder(
       itemCount: _suggestions.length,
@@ -568,7 +568,7 @@ int _convertHoraToMinutes(String hora) {
     ),
   ),
                               const SizedBox(height: 16),
-                              Container(
+                              SizedBox(
                                 height: 300,
                                 child: FlutterMap(
                                   mapController: _mapController,
@@ -651,7 +651,7 @@ int _convertHoraToMinutes(String hora) {
           filled: true,
           fillColor: Colors.white,
         ),
-        value: horasDropdown.contains(_selectedHoraDropdown) ? _selectedHoraDropdown : null,
+        initialValue: horasDropdown.contains(_selectedHoraDropdown) ? _selectedHoraDropdown : null,
         items: horasDropdown
             .map((hora) => DropdownMenuItem(
                   value: hora,
@@ -674,7 +674,7 @@ int _convertHoraToMinutes(String hora) {
           filled: true,
           fillColor: Colors.white,
         ),
-        value: horasDropdown.contains(_selectedHoraDropdown) ? _selectedHoraDropdown : null,
+        initialValue: horasDropdown.contains(_selectedHoraDropdown) ? _selectedHoraDropdown : null,
         items: horasDropdown
             .map((hora) => DropdownMenuItem(
                   value: hora,

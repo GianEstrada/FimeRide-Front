@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ListaMensajesScreen extends StatefulWidget {
+  const ListaMensajesScreen({super.key});
+
   @override
   _ListaMensajesScreenState createState() => _ListaMensajesScreenState();
 }

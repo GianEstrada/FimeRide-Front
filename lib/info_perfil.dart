@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui';
 
 import 'package:fimeride_front/configuracion_screen.dart';
 import 'package:fimeride_front/formulario_conductores.dart';
@@ -8,7 +7,6 @@ import 'package:fimeride_front/lista_mensajes_screen.dart';
 import 'package:fimeride_front/ofercer_viaje.dart';
 import 'package:fimeride_front/pagina_principal.dart';
 import 'package:fimeride_front/pantalla_favoritos.dart';
-import 'package:fimeride_front/chat_screen.dart';
 import 'package:fimeride_front/viajes_recientes.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;

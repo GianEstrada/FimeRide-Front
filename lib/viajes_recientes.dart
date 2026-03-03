@@ -7,7 +7,6 @@ import 'package:fimeride_front/info_viajes.dart';
 import 'package:fimeride_front/lista_mensajes_screen.dart';
 import 'package:fimeride_front/ofercer_viaje.dart';
 import 'package:fimeride_front/pantalla_favoritos.dart';
-import 'package:fimeride_front/chat_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,10 +24,11 @@ class _ViajesRecientesState extends State<ViajesRecientes> {
   String _nombreUsuario = 'Usuario';
   bool _isConductor = false;
   bool _isConductorEnabled = false;
-  List<bool> _isFavorite = List.generate(10, (index) => false);
+  final List<bool> _isFavorite = List.generate(10, (index) => false);
   List<dynamic> _viajesPasajero = [];
   List<dynamic> _viajesConductor = [];
   
+  @override
   void initState() {
     super.initState();
     _checkConductorStatus();
@@ -279,7 +279,7 @@ Future<void> _fetchViajesConductor() async {
                               });
                             }
                             :null,
-                          activeColor: Colors.white,
+                          activeThumbColor: Colors.white,
                           activeTrackColor: Color.fromARGB(255, 0, 87, 54),
                           inactiveThumbColor: Colors.white,
                           inactiveTrackColor: Colors.white54,

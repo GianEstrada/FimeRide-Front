@@ -19,6 +19,8 @@ class _PantallaInicioState extends State<PantallaInicio> {
   FocusNode focusMatricula = FocusNode();
   FocusNode focusContrasenia = FocusNode();
 
+  bool _obscurePassword = true;
+
   @override
   Widget build(BuildContext context) {
     double screenHeight = MediaQuery.of(context).size.height;
@@ -61,7 +63,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
                 Align(
                   alignment: Alignment(0.0, -0.15),
                   child: Text(
-                    "Vive La Fime",
+                    "VIVE LA FIME",
                     style: TextStyle(
                       fontFamily: 'DirtyBrush',
                       color: Colors.white,
@@ -120,12 +122,23 @@ class _PantallaInicioState extends State<PantallaInicio> {
                         child: TextField(
                           controller: contraseniaController,
                           focusNode: focusContrasenia,
-                          obscureText: true,
+                          obscureText: _obscurePassword,
                           decoration: InputDecoration(
                             filled: true,
                             fillColor: Colors.white,
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(vertical: 10.0, horizontal: 15.0),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                              _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                              color: Colors.black54,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                            ),
                           ),
                         ),
                       ),
@@ -139,7 +152,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
                     child: RichText(
                       textAlign: TextAlign.center,
                       text: TextSpan(
-                        text: "Olvide la contraseña",
+                        text: "OLVIDE LA CONTRASEÑA",
                         style: TextStyle(
                           color: Colors.white,
                           fontFamily: "ADLaMDisplay",
@@ -156,7 +169,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      ElevatedButton(
+                      ElevatedButton.icon(
                         onPressed: () {
                           String matricula = matriculaController.text;
                           String contrasenia = contraseniaController.text;
@@ -169,6 +182,8 @@ class _PantallaInicioState extends State<PantallaInicio> {
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Color.fromARGB(255, 1, 91, 57),
+                          foregroundColor: Colors.purple,
+                          overlayColor: Colors.white.withOpacity(0.3),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -177,7 +192,8 @@ class _PantallaInicioState extends State<PantallaInicio> {
                             width: screenWidth * .008,
                           ),
                         ),
-                        child: Text(
+                        icon: Icon(Icons.login, color: Colors.white),
+                        label: Text(
                           "Iniciar Sesion",
                           style: TextStyle(
                             fontSize: screenWidth / 25,
@@ -187,7 +203,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
                         ),
                       ),
                       SizedBox(width: 20),
-                      ElevatedButton(
+                      ElevatedButton.icon(
                         onPressed: () {
                           Navigator.push(
                             context,
@@ -196,6 +212,8 @@ class _PantallaInicioState extends State<PantallaInicio> {
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Color.fromARGB(255, 1, 91, 57),
+                          foregroundColor: Colors.purple,
+                          overlayColor: Colors.white.withOpacity(0.3),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -204,7 +222,8 @@ class _PantallaInicioState extends State<PantallaInicio> {
                             width: screenWidth * .008,
                           ),
                         ),
-                        child: Text(
+                        icon: Icon(Icons.app_registration, color: Colors.white),
+                        label: Text(
                           "Registrarse",
                           style: TextStyle(
                             fontSize: screenWidth / 25,
@@ -226,59 +245,63 @@ class _PantallaInicioState extends State<PantallaInicio> {
 
 Future<void> iniciarSesion(String matricula, String password) async {
   final url = Uri.parse("https://fimeride.onrender.com/api/login/");
-  final response = await http.post(
-    url,
-    headers: {"Content-Type": "application/json"},
-    body: jsonEncode({"username": matricula, "password": password}),
-  );
-
-  if (response.statusCode == 200) {
-    final responseData = jsonDecode(response.body);
-    final usuarioId = responseData['usuario_id'];
-    final conductorId = responseData['conductor_id'];
-    final pasajeroId = responseData['pasajero_id'];
-    final nombre = responseData['nombre'];
-
-    // Verifica que usuario_id no sea null
-    if (usuarioId == null) {
-      _showDialog("Error", "No se pudo obtener el ID del usuario", false);
-      return;
-    }
-
-    // Guarda los IDs en SharedPreferences
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('usuario_id', usuarioId);
-
-    // Guarda conductor_id si no es null
-    if (conductorId != null) {
-      await prefs.setInt('conductor_id', conductorId);
-    }
-
-    // Guarda pasajero_id si no es null
-    if (pasajeroId != null) {
-      await prefs.setInt('pasajero_id', pasajeroId);
-    }
-
-    if (nombre != null) {
-      await prefs.setString('nombre', nombre); // Guarda el nombre como String
-      print("Nombre guardado en SharedPreferences: $nombre");
-    }
-
-    _showDialog("Éxito", "Inicio de sesión exitoso", true);
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => PaginaPrincipal()),
+  try {
+    final response = await http.post(
+      url,
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({"username": matricula, "password": password}),
     );
-  } else if (response.statusCode == 403) {
-    _showDialog(
-      "Error",
-      "No se le ha aprobado la solicitud. Si ya envió su solicitud, favor de estar atento al correo universitario para información de la aprobación.",
-      false,
-    );
-  } else if (response.statusCode == 401) {
-    _showDialog("Error", "Credenciales incorrectas", false);
-  } else {
-    _showDialog("Error", "Error inesperado: ${response.statusCode}", false);
+
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      final usuarioId = responseData['usuario_id'];
+      final conductorId = responseData['conductor_id'];
+      final pasajeroId = responseData['pasajero_id'];
+      final nombre = responseData['nombre'];
+
+      // Verifica que usuario_id no sea null
+      if (usuarioId == null) {
+        _showDialog("Error", "No se pudo obtener el ID del usuario", false);
+        return;
+      }
+
+      // Guarda los IDs en SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('usuario_id', usuarioId);
+
+      // Guarda conductor_id si no es null
+      if (conductorId != null) {
+        await prefs.setInt('conductor_id', conductorId);
+      }
+
+      // Guarda pasajero_id si no es null
+      if (pasajeroId != null) {
+        await prefs.setInt('pasajero_id', pasajeroId);
+      }
+
+      if (nombre != null) {
+        await prefs.setString('nombre', nombre); // Guarda el nombre como String
+        print("Nombre guardado en SharedPreferences: $nombre");
+      }
+
+      _showDialog("Éxito", "Inicio de sesión exitoso", true);
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => PaginaPrincipal()),
+      );
+    } else if (response.statusCode == 403) {
+      _showDialog(
+        "Error",
+        "No se le ha aprobado la solicitud. Si ya envió su solicitud, favor de estar atento al correo universitario para información de la aprobación.",
+        false,
+      );
+    } else if (response.statusCode == 401) {
+      _showDialog("Error", "Credenciales incorrectas", false);
+    } else {
+      _showDialog("Error", "Error inesperado: ${response.statusCode}", false);
+    }
+  } catch(e){
+  _showDialog("Error de conexion", "Verifica tu internet", false);
   }
 }
 

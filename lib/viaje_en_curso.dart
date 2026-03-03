@@ -17,7 +17,7 @@ class ViajeEnProcesoScreen extends StatefulWidget {
   final String mapboxAccessToken;
 
   const ViajeEnProcesoScreen({
-    Key? key,
+    super.key,
     required this.startPoint,
     required this.endPoint,
     required this.direccionInicio,
@@ -27,7 +27,7 @@ class ViajeEnProcesoScreen extends StatefulWidget {
     required this.modeloVehiculo,
     required this.placasVehiculo,
     required this.mapboxAccessToken,
-  }) : super(key: key);
+  });
 
   @override
   _ViajeEnProcesoScreenState createState() => _ViajeEnProcesoScreenState();
@@ -35,7 +35,7 @@ class ViajeEnProcesoScreen extends StatefulWidget {
 
 class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
   List<LatLng> _routePoints = [];
-  String _estadoViaje = "En camino"; // Estado inicial del viaje
+  final String _estadoViaje = "En camino"; // Estado inicial del viaje
   int _tiempoRestante = 0; // Tiempo estimado de llegada en minutos
 
   @override

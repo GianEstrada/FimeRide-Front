@@ -7,7 +7,7 @@ class ChatScreen extends StatefulWidget {
   final Map<String, dynamic> otroUsuario;
   final int idViaje;
 
-  ChatScreen({required this.otroUsuario, required this.idViaje});
+  const ChatScreen({super.key, required this.otroUsuario, required this.idViaje});
 
   @override
   _ChatScreenState createState() => _ChatScreenState();

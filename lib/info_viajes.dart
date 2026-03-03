@@ -7,7 +7,6 @@ import 'package:fimeride_front/lista_mensajes_screen.dart';
 import 'package:fimeride_front/ofercer_viaje.dart';
 import 'package:fimeride_front/pagina_principal.dart';
 import 'package:fimeride_front/pantalla_favoritos.dart';
-import 'package:fimeride_front/chat_screen.dart';
 import 'package:fimeride_front/viajes_recientes.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -300,7 +299,7 @@ Future<List<dynamic>> fetchViajesRealizadosConductor(int conductorId) async {
                               });
                             }
                             :null,
-                          activeColor: Colors.white,
+                          activeThumbColor: Colors.white,
                           activeTrackColor: Color.fromARGB(255, 0, 87, 54),
                           inactiveThumbColor: Colors.white,
                           inactiveTrackColor: Colors.white54,

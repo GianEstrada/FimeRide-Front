@@ -17,6 +17,7 @@ class FormularioPasajero extends StatefulWidget {
 
 class _FormularioPasajeroState extends State<FormularioPasajero> {
   bool _solicitarConductor = false;
+  bool _obscurePassword = true;
   File? _profileImage;
   File? _frontCredentialImage;
   File? _backCredentialImage;
@@ -147,10 +148,11 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                 ),
                 SizedBox(height: 10),
                 _buildInputSection("MATRICULA", _matriculaController, false),
+
                 SizedBox(height: 15),
-                _buildInputSection("CONTRASEÑA", _passwordController, true),
+                _buildInputSectionPassword("CONTRASEÑA", _passwordController, _obscurePassword),
                 SizedBox(height: 15),
-                _buildInputSection("CONFIRME CONTRASEÑA", _confirmPasswordController, true),
+                _buildInputSectionPassword("CONFIRME CONTRASEÑA", _confirmPasswordController, _obscurePassword),
                 SizedBox(height: 15),
                 _buildInputSection("NOMBRE COMPLETO", _nombreCompletoController, false),
                 SizedBox(height: 15),
@@ -218,7 +220,7 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                       ),
                       SizedBox(width: 8),
                       Text(
-                        "Quiero ser conductor",
+                        "QUIERO SER CONDUCTOR",
                         style: TextStyle(
                           fontFamily: 'ADLaMDisplay',
                           color: Colors.white,
@@ -230,7 +232,7 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                   ),
                 ),
                 SizedBox(height: 10),
-                ElevatedButton(
+                ElevatedButton.icon(
                   onPressed: () {
                     showDialog(
                       context: context,
@@ -261,7 +263,8 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                       },
                     );
                   },
-                  child: Text("Continuar"),
+                  label: Text("Continuar"),
+                  icon: Icon(Icons.arrow_forward_ios),
                 ),
                 SizedBox(height: 10),
               ],
@@ -295,6 +298,47 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
               fillColor: Colors.white,
               border: OutlineInputBorder(),
               contentPadding: EdgeInsets.symmetric(vertical: 10.0, horizontal: 15.0),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInputSectionPassword(String label, TextEditingController controller, bool obscureText) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontFamily: 'ADLaMDisplay',
+            color: Colors.white,
+            fontSize: MediaQuery.of(context).size.width / 18,
+          ),
+        ),
+        SizedBox(height: 5),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 30.0),
+          child: TextField(
+            controller: controller,
+            obscureText: obscureText,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(vertical: 10.0, horizontal: 15.0),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  obscureText ? Icons.visibility_off : Icons.visibility,
+                  color: Colors.black54,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+              ),
             ),
           ),
         ),
