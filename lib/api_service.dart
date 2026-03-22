@@ -1,6 +1,10 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+// Token de Mapbox compartido por las pantallas de mapa de FimeRide.
+// Se inicializa al abrir FimeRide desde el hub.
+String? mapboxAccessToken;
+
 Future<String?> fetchMapboxToken() async {
   final url = Uri.parse("https://fimeride.onrender.com/api/mapbox-token/");
   print("URL: $url");

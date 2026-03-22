@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:fimeride_front/main.dart';
+import 'package:fimeride_front/api_service.dart';
 import 'package:fimeride_front/pagina_principal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';

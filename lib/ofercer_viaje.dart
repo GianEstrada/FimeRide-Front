@@ -14,7 +14,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'pagina_principal.dart';
-import 'main.dart';
+import 'api_service.dart';
 
 class OfercerViaje extends StatefulWidget {
   const OfercerViaje({super.key});

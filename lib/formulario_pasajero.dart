@@ -1,12 +1,10 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:file_selector/file_selector.dart';
-import 'package:fimeride_front/formulario_conductores.dart';
-import 'package:fimeride_front/login.dart';
+import 'package:fimeride_front/fimehub_login.dart';
 
 class FormularioPasajero extends StatefulWidget {
   const FormularioPasajero({super.key});
@@ -16,7 +14,6 @@ class FormularioPasajero extends StatefulWidget {
 }
 
 class _FormularioPasajeroState extends State<FormularioPasajero> {
-  bool _solicitarConductor = false;
   bool _obscurePassword = true;
   File? _profileImage;
   File? _frontCredentialImage;
@@ -29,6 +26,19 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
   final TextEditingController _confirmPasswordController = TextEditingController();
   final TextEditingController _nombreCompletoController = TextEditingController();
   final TextEditingController _correoController = TextEditingController();
+
+  bool get _isFormComplete {
+    return _matriculaController.text.trim().isNotEmpty &&
+        _passwordController.text.isNotEmpty &&
+        _confirmPasswordController.text.isNotEmpty &&
+        _passwordController.text == _confirmPasswordController.text &&
+        _nombreCompletoController.text.trim().isNotEmpty &&
+        _correoController.text.trim().isNotEmpty &&
+        _profileImage != null &&
+        _frontCredentialImage != null &&
+        _backCredentialImage != null &&
+        _boletaRectoria != null;
+  }
 
   Future<void> _handleImageSelection(Function(File) onImageSelected) async {
     final ImagePicker picker = ImagePicker();
@@ -203,37 +213,10 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                     ],
                   ),
                 ),
-                SizedBox(height: 15),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Checkbox(
-                        value: _solicitarConductor,
-                        onChanged: (bool? value) {
-                          setState(() {
-                            _solicitarConductor = value ?? false;
-                          });
-                        },
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        "QUIERO SER CONDUCTOR",
-                        style: TextStyle(
-                          fontFamily: 'ADLaMDisplay',
-                          color: Colors.white,
-                          fontSize: screenWidth / 25,
-                        ),
-                        textAlign: TextAlign.left,
-                      ),
-                    ],
-                  ),
-                ),
                 SizedBox(height: 10),
                 ElevatedButton.icon(
-                  onPressed: () {
+                  onPressed: _isFormComplete
+                      ? () {
                     showDialog(
                       context: context,
                       builder: (context) {
@@ -262,10 +245,22 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                         );
                       },
                     );
-                  },
+                  }
+                      : null,
                   label: Text("Continuar"),
                   icon: Icon(Icons.arrow_forward_ios),
                 ),
+                SizedBox(height: 10),
+                if (_passwordController.text.isNotEmpty &&
+                    _confirmPasswordController.text.isNotEmpty &&
+                    _passwordController.text != _confirmPasswordController.text)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: Text(
+                      "Las contraseñas no coinciden",
+                      style: TextStyle(color: Colors.red[200]),
+                    ),
+                  ),
                 SizedBox(height: 10),
               ],
             ),
@@ -293,6 +288,7 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
           child: TextField(
             controller: controller,
             obscureText: obscureText,
+            onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               filled: true,
               fillColor: Colors.white,
@@ -323,6 +319,7 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
           child: TextField(
             controller: controller,
             obscureText: obscureText,
+            onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               filled: true,
               fillColor: Colors.white,
@@ -405,6 +402,10 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
   }
 
   Future<void> _registrarUsuario() async {
+  if (!_isFormComplete) {
+    return;
+  }
+
   final url = Uri.parse('https://fimeride.onrender.com/api/registrar/');
   final request = http.MultipartRequest('POST', url);
 
@@ -412,7 +413,7 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
   request.fields['correo_universitario'] = _correoController.text;
   request.fields['matricula'] = _matriculaController.text;
   request.fields['contraseña'] = _passwordController.text;
-  request.fields['solicito_conductor'] = _solicitarConductor.toString();
+  request.fields['solicito_conductor'] = 'false';
 
   if (_profileImage != null) {
     request.files.add(await http.MultipartFile.fromPath('foto_perfil', _profileImage!.path));
@@ -431,30 +432,16 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
     final response = await request.send();
 
     if (response.statusCode == 201) {
-      final responseBody = await response.stream.bytesToString();
-      final responseData = jsonDecode(responseBody);
-
-      // Obtén el usuario_id de la respuesta
-      final usuarioId = responseData['usuario_id'];
+      await response.stream.bytesToString();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Registro exitoso")),
       );
 
-      // Si el usuario marcó el checkbox, pasa el usuario_id al segundo formulario
-      if (_solicitarConductor) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => FormularioConductores(usuarioId: usuarioId),
-          ),
-        );
-      } else {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => PantallaInicio()),
-        );
-      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const FimeHubLogin()),
+      );
     } else {
       final responseBody = await response.stream.bytesToString();
       ScaffoldMessenger.of(context).showSnackBar(

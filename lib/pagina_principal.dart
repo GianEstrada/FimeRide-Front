@@ -1,11 +1,12 @@
 import 'dart:convert';
 
 import 'package:fimeride_front/configuracion_screen.dart';
+import 'package:fimeride_front/fimehub_home.dart';
+import 'package:fimeride_front/fimehub_login.dart';
 import 'package:fimeride_front/formulario_conductores.dart';
 import 'package:fimeride_front/info_perfil.dart';
 import 'package:fimeride_front/info_viajes.dart';
 import 'package:fimeride_front/lista_mensajes_screen.dart';
-import 'package:fimeride_front/login.dart';
 import 'package:fimeride_front/pantalla_favoritos.dart';
 import 'package:fimeride_front/chat_screen.dart';
 import 'package:fimeride_front/viaje_en_curso.dart';
@@ -638,7 +639,13 @@ Future<void> _fetchUsuarioInfo() async {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.home, color: Color.fromARGB(255, 0, 87, 54)),
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (context) => const FimeHubHome()),
+                        (route) => false,
+                      );
+                    },
                   ),
                   IconButton(
                     icon: const Icon(Icons.directions_car, color: Color.fromARGB(255, 0, 87, 54)),
@@ -727,11 +734,17 @@ Future<void> _fetchUsuarioInfo() async {
             child: const Text("Cancelar"),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
+              final prefs = await SharedPreferences.getInstance();
+              final usuarioId = prefs.getInt('usuario_id');
               Navigator.of(context).pop();
+              if (usuarioId == null) {
+                _showErrorDialog(context, "No se pudo obtener tu usuario. Vuelve a iniciar sesión.");
+                return;
+              }
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => FormularioConductores(usuarioId: 0)), // Ajusta según sea necesario
+                MaterialPageRoute(builder: (context) => FormularioConductores(usuarioId: usuarioId)),
               );
             },
             child: const Text("Enviar solicitud"),
@@ -774,9 +787,10 @@ void _showAyudaDialog(BuildContext context) {
 void _cerrarSesion(BuildContext context) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.clear(); // Elimina todos los datos almacenados
-  Navigator.pushReplacement(
+  Navigator.pushAndRemoveUntil(
     context,
-    MaterialPageRoute(builder: (context) => PantallaInicio()), // Redirige a la pantalla de inicio de sesión
+    MaterialPageRoute(builder: (context) => const FimeHubLogin()),
+    (route) => false,
   );
 }
 

@@ -42,3 +42,4 @@ flutter:
   assets:
     - path: assets/image/FimeRideLogo.png
     - path: assets/image/icono-perfil.png
+    - path: assets/image/Fimehub.png

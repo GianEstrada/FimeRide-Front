@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:fimeride_front/login.dart';
+import 'package:fimeride_front/fimehub_login.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -347,7 +347,7 @@ class _FormularioConductoresState extends State<FormularioConductores> {
         );
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => PantallaInicio()),
+          MaterialPageRoute(builder: (context) => const FimeHubLogin()),
         );
       } else {
         final responseBody = await response.stream.bytesToString();
