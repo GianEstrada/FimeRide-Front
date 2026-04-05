@@ -1,10 +1,12 @@
 import 'dart:io';
 
+import 'package:fimeride_front/terminos_condiciones.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:fimeride_front/fimehub_login.dart';
+import 'package:flutter/gestures.dart';
 
 class FormularioPasajero extends StatefulWidget {
   const FormularioPasajero({super.key});
@@ -20,6 +22,7 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
   File? _backCredentialImage;
   File? _boletaRectoria;
   String _boletaFileName = "Seleccionar boleta de rectoría";
+  bool _aceptaTerminos = false;
 
   final TextEditingController _matriculaController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -37,7 +40,8 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
         _profileImage != null &&
         _frontCredentialImage != null &&
         _backCredentialImage != null &&
-        _boletaRectoria != null;
+        _boletaRectoria != null &&
+        _aceptaTerminos;
   }
 
   Future<void> _handleImageSelection(Function(File) onImageSelected) async {
@@ -213,6 +217,50 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                     ],
                   ),
                 ),
+                 Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 30.0),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: _aceptaTerminos,
+                        onChanged: (value) {
+                          setState(() {
+                            _aceptaTerminos = value ?? false;
+                          });
+                        },
+                        activeColor: Colors.white,
+                        checkColor: Color.fromARGB(255, 0, 87, 54),
+                      ),
+                      Expanded(
+                        child: RichText(
+                          text: TextSpan(
+                            text: 'Acepto los ',
+                            style: TextStyle(color: Colors.white),
+                            children: [
+                              TextSpan(
+                                text: 'Términos y Condiciones',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  decoration: TextDecoration.underline,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const terminos_condiciones(), // o terminos_condiciones()
+                                      ),
+                                    );
+                                  },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 SizedBox(height: 10),
                 ElevatedButton.icon(
                   onPressed: _isFormComplete
@@ -223,8 +271,7 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                         return AlertDialog(
                           title: Text("Confirmación"),
                           content: Text(
-                            "Al hacer click en continuar automáticamente aceptas los Términos y Condiciones de la aplicación.\n\n"
-                            "También das fe de que todos los datos y documentos enviados son totalmente reales y propios.\n\n"
+                            "Al hacer click en Confirmar da fe de que todos los datos son reales y propios.\n\n"
                             "¿Desea continuar?",
                           ),
                           actions: [
@@ -247,6 +294,18 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                     );
                   }
                       : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color.fromARGB(255, 1, 91, 57),
+                    foregroundColor: Colors.white,
+                    overlayColor: Colors.white.withOpacity(0.3),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    side: BorderSide(
+                      color: Colors.white,
+                      width: MediaQuery.of(context).size.width * .008,
+                    ),
+                  ),
                   label: Text("Continuar"),
                   icon: Icon(Icons.arrow_forward_ios),
                 ),
