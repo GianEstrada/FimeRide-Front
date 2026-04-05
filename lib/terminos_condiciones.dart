@@ -13,7 +13,7 @@ class terminos_condiciones extends StatefulWidget {
 
 class _terminos_condicionesState extends State<terminos_condiciones> {
   // Cambia esta URL por la real de tu PDF
-  final String pdfUrl = 'https://github.com/GianEstrada/FimeRide-Front/blob/master/terminos_condiciones.pdf';
+  final String pdfUrl = 'https://github.com/GianEstrada/FimeRide-Front/blob/master/TE%CC%81RMINOS%20Y%20CONDICIONES%20DE%20USO.pdf';
   bool _isLoading = true;
   String? _errorMessage;
   String? _localPath;
