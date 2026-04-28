@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:fimeride_front/terminos_condiciones.dart';
+import 'package:flutter/gestures.dart';
 
 class FormularioConductores extends StatefulWidget {
   final int usuarioId;
@@ -16,6 +18,7 @@ class FormularioConductores extends StatefulWidget {
 }
 
 class _FormularioConductoresState extends State<FormularioConductores> {
+  bool _aceptaTerminos = false;
   final TextEditingController _placasController = TextEditingController();
   final TextEditingController _modeloController = TextEditingController();
   File? _polizaSeguro;
@@ -25,6 +28,17 @@ class _FormularioConductoresState extends State<FormularioConductores> {
   File? _backLicenseImage;
   File? _frontIdImage;
   File? _backIdImage;
+
+  bool get _isFormComplete {
+    return _placasController.text.isNotEmpty &&
+        _modeloController.text.isNotEmpty &&
+        _frontLicenseImage != null &&
+        _backLicenseImage != null &&
+        _frontIdImage != null &&
+        _backIdImage != null &&
+        _polizaSeguro != null &&
+        _aceptaTerminos; // Nueva condición
+  }
 
   @override
   void dispose() {
@@ -207,39 +221,82 @@ class _FormularioConductoresState extends State<FormularioConductores> {
                     ),
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 30.0),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: _aceptaTerminos,
+                        onChanged: (value) {
+                          setState(() {
+                            _aceptaTerminos = value ?? false;
+                          });
+                        },
+                        activeColor: Colors.white,
+                        checkColor: const Color.fromARGB(255, 0, 87, 54),
+                      ),
+                      Expanded(
+                        child: RichText(
+                          text: TextSpan(
+                            text: 'Acepto los ',
+                            style: const TextStyle(color: Colors.white),
+                            children: [
+                              TextSpan(
+                                text: 'Términos y Condiciones',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  decoration: TextDecoration.underline,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const terminos_condiciones(), // Asegúrate de que la clase esté importada
+                                      ),
+                                    );
+                                  },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 SizedBox(height: 20),
                 ElevatedButton(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) {
-                        return AlertDialog(
-                          title: Text("Confirmación"),
-                          content: Text(
-                            "Al hacer click en continuar automáticamente aceptas los Términos y Condiciones de la aplicación.\n\n"
-                            "También das fe de que todos los datos y documentos enviados son totalmente reales y propios.\n\n"
-                            "¿Desea continuar?",
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.of(context).pop();
-                              },
-                              child: Text("Cancelar"),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.of(context).pop();
-                                _registrarConductor();
-                              },
-                              child: Text("Continuar"),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  },
-                  child: Text("Registrar"),
+                  onPressed: _isFormComplete
+                      ? () {
+                          showDialog(
+                            context: context,
+                            builder: (context) {
+                              return AlertDialog(
+                                title: const Text("Confirmación"),
+                                content: const Text(
+                                  "Confirma que todos los datos y documentos enviados son totalmente reales y propios.\n\n"
+                                  "¿Desea continuar?",
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(context).pop(),
+                                    child: const Text("Cancelar"),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.of(context).pop();
+                                      _registrarConductor();
+                                    },
+                                    child: const Text("Continuar"),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        }
+                      : null,
+                  child: const Text("Registrar"),
                 ),
                 SizedBox(height: 10),
               ],
@@ -353,14 +410,14 @@ class _FormularioConductoresState extends State<FormularioConductores> {
         final responseBody = await response.stream.bytesToString();
         print("Error al registrar conductor: $responseBody");
         print("Datos enviados:");
-print("usuario_id: ${widget.usuarioId}");
-print("numero_placas: ${_placasController.text}");
-print("marca_modelo_año: ${_modeloController.text}");
-print("licencia_frontal: ${_frontLicenseImage?.path}");
-print("licencia_trasera: ${_backLicenseImage?.path}");
-print("identificacion_frontal: ${_frontIdImage?.path}");
-print("identificacion_trasera: ${_backIdImage?.path}");
-print("poliza_seguro: ${_polizaSeguro?.path}");
+        print("usuario_id: ${widget.usuarioId}");
+        print("numero_placas: ${_placasController.text}");
+        print("marca_modelo_año: ${_modeloController.text}");
+        print("licencia_frontal: ${_frontLicenseImage?.path}");
+        print("licencia_trasera: ${_backLicenseImage?.path}");
+        print("identificacion_frontal: ${_frontIdImage?.path}");
+        print("identificacion_trasera: ${_backIdImage?.path}");
+        print("poliza_seguro: ${_polizaSeguro?.path}");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error al registrar conductor: $responseBody")),
           

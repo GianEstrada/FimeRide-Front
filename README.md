@@ -10,8 +10,8 @@ A new Flutter project.
 - Seguir todos los pasos para instalar Flutter en VS Code (https://docs.flutter.dev/install/quick)
 
 ## Pasos para importar el proyecto
-1. ejecuta el comando flutter pub get para descargar todas las librerias y paquetes necesarios
-2. ejecuta el comando flutter doctor para verificar que se tiene todo lo necesario.
+1. ejecuta el comando `flutter pub get` desde la raiz del pryecto para descargar todas las librerias, dependencias y paquetes necesarios
+2. ejecuta el comando `flutter doctor` para verificar que se tiene todo lo necesario.
 
 ## Pasos para correr el proyecto
 1. Crear un archivo .env en la raiz del proyecto, ASEGURARSE DE QUE EL ARCHIVO ESTA EN EL *.gitignore* PARA QUE NO SE COMMITE.
