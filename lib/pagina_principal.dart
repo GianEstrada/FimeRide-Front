@@ -9,7 +9,9 @@ import 'package:fimeride_front/info_viajes.dart';
 import 'package:fimeride_front/lista_mensajes_screen.dart';
 import 'package:fimeride_front/pantalla_favoritos.dart';
 import 'package:fimeride_front/chat_screen.dart';
+import 'package:fimeride_front/preinicio_viaje_screen.dart';
 import 'package:fimeride_front/viaje_en_curso.dart';
+import 'package:fimeride_front/viaje_alert_service.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
@@ -24,26 +26,183 @@ class PaginaPrincipal extends StatefulWidget {
   _PaginaPrincipalState createState() => _PaginaPrincipalState();
 }
 
-class _PaginaPrincipalState extends State<PaginaPrincipal> {
+class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingObserver {
   bool _isConductor = false;
   bool _isConductorEnabled = false;
   List<dynamic> _viajes = [];
   List<dynamic> _asignaciones = [];
   String _fotoPerfil = 'assets/image/icono-perfil'; // Imagen predeterminada
   String _nombreUsuario = 'Usuario';
+  ViajeAlertService? _viajeAlertService;
+  bool _preinicioConductorMostrado = false;
+  final Set<int> _preinicioPasajeroMostrados = <int>{};
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkConductorStatus();
     _fetchViajes();
     _fetchUsuarioInfo();
+    _initAlertasViaje();
   }
 
   @override
   void dispose() {
-    // Cancela cualquier operación o referencia antes de que el widget sea eliminado
+    WidgetsBinding.instance.removeObserver(this);
+    _viajeAlertService?.stop();
     super.dispose();
+  }
+
+  Future<void> _initAlertasViaje() async {
+    final prefs = await SharedPreferences.getInstance();
+    final conductorId = prefs.getInt('conductor_id');
+    final pasajeroId = prefs.getInt('pasajero_id');
+
+    _viajeAlertService = ViajeAlertService(
+      conductorId: conductorId,
+      pasajeroId: pasajeroId,
+      onConductorPopup: _mostrarPopupConductor,
+      onConductorPreinicio: _mostrarPreinicioConductor,
+      onPasajeroPopup: _mostrarPopupPasajero,
+      onPasajeroConductorConfirmado: _mostrarAvisoConfirmacionConductor,
+    );
+    await _viajeAlertService?.start();
+  }
+
+  Future<void> _mostrarPopupConductor(Map<String, dynamic> viaje) async {
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirmacion de viaje'),
+          content: Text(
+            'Tiene un viaje proximo en 15 minutos ${viaje['inicio']} -> ${viaje['destino']} ${viaje['hora_salida']}.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await _accionConductorViaje(viaje['id'], 'cancelar');
+                if (mounted) Navigator.of(context).pop();
+              },
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                await _accionConductorViaje(viaje['id'], 'confirmar');
+                if (mounted) Navigator.of(context).pop();
+              },
+              child: const Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _mostrarPopupPasajero(Map<String, dynamic> viaje, {required bool esHoraSalida}) async {
+    if (!mounted) return;
+
+    final mensajeBase =
+        'Tienes un viaje proximo: ${viaje['inicio']} -> ${viaje['destino']} ${viaje['hora_salida']}. '
+        'Tienes 5 minutos despues de la hora de salida para subir al vehiculo.';
+
+    if (!esHoraSalida) {
+      await showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Recordatorio de viaje'),
+            content: Text(mensajeBase),
+            actions: [
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+
+    final viajeId = viaje['viaje_id'] as int;
+    if (_preinicioPasajeroMostrados.contains(viajeId)) return;
+    _preinicioPasajeroMostrados.add(viajeId);
+
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PreinicioPasajeroScreen(
+          data: viaje,
+          onConfirmarAbordo: () async {
+            await _confirmarAbordo(viaje['asignacion_id']);
+            if (mounted) Navigator.of(context).pop();
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _mostrarAvisoConfirmacionConductor(Map<String, dynamic> viaje) async {
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Viaje confirmado'),
+          content: Text(
+            'El conductor del viaje de ${viaje['inicio']} a ${viaje['destino']} a las ${viaje['hora_salida']} confirmo el viaje de hoy.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Aceptar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _mostrarPreinicioConductor(Map<String, dynamic> preinicio) async {
+    if (!mounted || _preinicioConductorMostrado) return;
+    _preinicioConductorMostrado = true;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PreinicioConductorScreen(
+          data: preinicio,
+          onRefresh: () async {
+            await _viajeAlertService?.forceRefresh();
+          },
+        ),
+      ),
+    );
+
+    _preinicioConductorMostrado = false;
+  }
+
+  Future<void> _confirmarAbordo(int asignacionId) async {
+    final url = Uri.parse('https://fimeride.onrender.com/api/asignaciones/$asignacionId/abordo/');
+    await http.patch(url, headers: {'Content-Type': 'application/json'});
+    await _viajeAlertService?.forceRefresh();
+  }
+
+  Future<void> _accionConductorViaje(int viajeId, String accion) async {
+    final url = Uri.parse('https://fimeride.onrender.com/api/viajes/$viajeId/accion_conductor/');
+    await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'accion': accion}),
+    );
+    await _viajeAlertService?.forceRefresh();
   }
 
   Future<void> _checkConductorStatus() async {

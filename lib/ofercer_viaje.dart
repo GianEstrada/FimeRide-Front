@@ -34,6 +34,8 @@ class _OfrecerViajeState extends State<OfercerViaje> {
   final TextEditingController _horaLlegadaController = TextEditingController();
   final MapController _mapController = MapController();
   final TextEditingController _fechaController = TextEditingController();
+  final TextEditingController _modeloVehiculoController = TextEditingController();
+  final TextEditingController _placasVehiculoController = TextEditingController();
   
   int _asientosDisponibles = 1;
 
@@ -203,6 +205,13 @@ void _mostrarResumenViaje() {
   );
   return;
 }
+
+  if (_modeloVehiculoController.text.isEmpty || _placasVehiculoController.text.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Por favor, completa modelo y placas del vehiculo.")),
+    );
+    return;
+  }
   // Convertir las horas a minutos desde la medianoche
   final int horaSalidaMinutos = _convertHoraToMinutes(_horaSalidaController.text);
   final int horaLlegadaMinutos = _convertHoraToMinutes(_horaLlegadaController.text);
@@ -253,6 +262,8 @@ void _mostrarResumenViaje() {
       horaLlegada: _horaLlegadaController.text,
       asientosDisponibles: _asientosDisponibles,
       fecha: _fechaController.text, // Pasa los asientos disponibles
+      modeloVehiculo: _modeloVehiculoController.text,
+      placasVehiculo: _placasVehiculoController.text,
       ),
     ),
   ).then((result) {
@@ -266,6 +277,8 @@ void _mostrarResumenViaje() {
         _horaLlegadaController.text = result['horaLlegada'] ?? '';
         _asientosDisponibles = result['asientosDisponibles'] ?? 1;
         _fechaController.text = result['fecha'] ?? '';
+        _modeloVehiculoController.text = result['modeloVehiculo'] ?? '';
+        _placasVehiculoController.text = result['placasVehiculo'] ?? '';
       });
     }
   });
@@ -715,7 +728,29 @@ int _convertHoraToMinutes(String hora) {
                                   fillColor: Colors.white,
                                 ),
                               ),
-                               const SizedBox(height: 16),
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _modeloVehiculoController,
+                                decoration: InputDecoration(
+                                  labelText: "Modelo del Vehiculo",
+                                  hintText: "Ejemplo: Toyota Corolla 2020",
+                                  border: OutlineInputBorder(),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _placasVehiculoController,
+                                decoration: InputDecoration(
+                                  labelText: "Placas del Vehiculo",
+                                  hintText: "Ejemplo: ABC-1234",
+                                  border: OutlineInputBorder(),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
 Row(
   mainAxisAlignment: MainAxisAlignment.spaceBetween,
   children: [

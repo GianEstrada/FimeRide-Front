@@ -18,6 +18,8 @@ class ResumenViajeScreen extends StatefulWidget {
   final String direccionFinal;
   final int asientosDisponibles;
   final String fecha;
+  final String modeloVehiculo;
+  final String placasVehiculo;
 
   const ResumenViajeScreen({
     super.key,
@@ -31,6 +33,8 @@ class ResumenViajeScreen extends StatefulWidget {
     required this.horaLlegada,
     required this.asientosDisponibles,
     required this.fecha,
+    required this.modeloVehiculo,
+    required this.placasVehiculo,
   });
 
   @override
@@ -207,6 +211,8 @@ Future<int?> obtenerConductorId() async {
                         Text("Hora de Salida: ${widget.horaSalida}"),
                         Text("Hora de Llegada: ${widget.horaLlegada}"),
                         Text("Fecha del Viaje: ${widget.fecha}"),
+                        Text("Modelo del Vehiculo: ${widget.modeloVehiculo}"),
+                        Text("Placas: ${widget.placasVehiculo}"),
                       ],
                     ),
                   ),
@@ -225,6 +231,8 @@ Future<int?> obtenerConductorId() async {
                           'horaSalida': widget.horaSalida,
                           'horaLlegada': widget.horaLlegada,
                           'fecha': widget.fecha,
+                          'modeloVehiculo': widget.modeloVehiculo,
+                          'placasVehiculo': widget.placasVehiculo,
                         }
                         );
                       },
@@ -299,6 +307,14 @@ Future<Map<String, dynamic>?> _registrarViaje() async {
     'hora_salida': widget.horaSalida,
     'hora_llegada': widget.horaLlegada,
     'descripcion': widget.descripcion,
+    'direccion_inicio': widget.direccionInicio,
+    'direccion_destino': widget.direccionFinal,
+    'origen_lat': widget.startPoint.latitude,
+    'origen_lng': widget.startPoint.longitude,
+    'destino_lat': widget.endPoint.latitude,
+    'destino_lng': widget.endPoint.longitude,
+    'modelo_vehiculo': widget.modeloVehiculo,
+    'placas_vehiculo': widget.placasVehiculo,
     'asientos_disponibles': widget.asientosDisponibles,
     'costo': widget.costo,
     'fecha_viaje': fechaFormateada, // Usa la fecha formateada
