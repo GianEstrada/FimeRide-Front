@@ -34,16 +34,22 @@ class ViajeAlertService {
   final Set<int> _viajesHoraSalidaNotificados = <int>{};
   bool _popupConductorActivo = false;
 
+  int _asInt(dynamic value, {int fallback = 0}) {
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value) ?? fallback;
+    return fallback;
+  }
+
   Future<void> start() async {
-    await _poll();
+    await _safePoll();
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
-      await _poll();
+      await _safePoll();
     });
   }
 
   Future<void> forceRefresh() async {
-    await _poll();
+    await _safePoll();
   }
 
   void stop() {
@@ -60,12 +66,22 @@ class ViajeAlertService {
     }
   }
 
+  Future<void> _safePoll() async {
+    try {
+      await _poll();
+    } catch (_) {
+      // Evita que errores de red/parse rompan la app al abrir FimeRide.
+    }
+  }
+
   Future<void> _pollConductor() async {
     final url = Uri.parse('https://fimeride.onrender.com/api/recordatorios/conductor/$conductorId/');
-    final response = await http.get(url);
+    final response = await http.get(url).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) return;
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final parsed = jsonDecode(response.body);
+    if (parsed is! Map<String, dynamic>) return;
+    final data = parsed;
     final showPopup = data['show_popup'] == true;
     final showNotification = data['show_notification'] == true;
     final viaje = data['viaje'] as Map<String, dynamic>?;
@@ -84,7 +100,7 @@ class ViajeAlertService {
       if (hanPasado3Min) {
         _ultimaNotifConductor = ahora;
         await LocalNotificationService.show(
-          id: 1100 + (viaje['id'] as int? ?? 0),
+          id: 1100 + _asInt(viaje['id']),
           title: 'Tiene un viaje proximo',
           body: 'Por favor confirme o se cancelara automaticamente',
         );
@@ -98,13 +114,17 @@ class ViajeAlertService {
 
   Future<void> _pollPasajero() async {
     final url = Uri.parse('https://fimeride.onrender.com/api/recordatorios/pasajero/$pasajeroId/');
-    final response = await http.get(url);
+    final response = await http.get(url).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) return;
 
-    final data = jsonDecode(response.body) as List<dynamic>;
+    final parsed = jsonDecode(response.body);
+    if (parsed is! List<dynamic>) return;
+    final data = parsed;
     for (final item in data) {
-      final viaje = item as Map<String, dynamic>;
-      final viajeId = viaje['viaje_id'] as int;
+      if (item is! Map<String, dynamic>) continue;
+      final viaje = item;
+      final viajeId = _asInt(viaje['viaje_id'], fallback: -1);
+      if (viajeId < 0) continue;
       final confirmado = viaje['confirmado_por_conductor'] == true;
       final mostrar5Min = viaje['mostrar_aviso_5_min'] == true;
       final mostrarHora = viaje['mostrar_preinicio'] == true;

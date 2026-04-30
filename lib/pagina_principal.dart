@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:fimeride_front/configuracion_screen.dart';
@@ -9,12 +10,12 @@ import 'package:fimeride_front/info_viajes.dart';
 import 'package:fimeride_front/lista_mensajes_screen.dart';
 import 'package:fimeride_front/pantalla_favoritos.dart';
 import 'package:fimeride_front/chat_screen.dart';
+import 'package:fimeride_front/local_notification_service.dart';
 import 'package:fimeride_front/preinicio_viaje_screen.dart';
 import 'package:fimeride_front/viaje_en_curso.dart';
 import 'package:fimeride_front/viaje_alert_service.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ofercer_viaje.dart';
 import 'viajes_recientes.dart';
@@ -27,6 +28,10 @@ class PaginaPrincipal extends StatefulWidget {
 }
 
 class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingObserver {
+  // DEBUG_REMOVE_START: cambia a false o borra este bloque para quitar herramientas debug.
+  static const bool _debugToolsEnabled = true;
+  // DEBUG_REMOVE_END
+
   bool _isConductor = false;
   bool _isConductorEnabled = false;
   List<dynamic> _viajes = [];
@@ -34,7 +39,11 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
   String _fotoPerfil = 'assets/image/icono-perfil'; // Imagen predeterminada
   String _nombreUsuario = 'Usuario';
   ViajeAlertService? _viajeAlertService;
+  Timer? _viajeEnCursoTimer;
   bool _preinicioConductorMostrado = false;
+  bool _viajeEnCursoVisible = false;
+  int? _conductorId;
+  int? _pasajeroId;
   final Set<int> _preinicioPasajeroMostrados = <int>{};
 
   @override
@@ -44,13 +53,17 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
     _checkConductorStatus();
     _fetchViajes();
     _fetchUsuarioInfo();
-    _initAlertasViaje();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _initAlertasViaje();
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _viajeAlertService?.stop();
+    _viajeEnCursoTimer?.cancel();
     super.dispose();
   }
 
@@ -58,6 +71,9 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
     final prefs = await SharedPreferences.getInstance();
     final conductorId = prefs.getInt('conductor_id');
     final pasajeroId = prefs.getInt('pasajero_id');
+
+    _conductorId = conductorId;
+    _pasajeroId = pasajeroId;
 
     _viajeAlertService = ViajeAlertService(
       conductorId: conductorId,
@@ -68,6 +84,69 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
       onPasajeroConductorConfirmado: _mostrarAvisoConfirmacionConductor,
     );
     await _viajeAlertService?.start();
+    _initMonitorViajeEnCurso();
+  }
+
+  void _initMonitorViajeEnCurso() {
+    _viajeEnCursoTimer?.cancel();
+    _pollViajeEnCurso();
+    _viajeEnCursoTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _pollViajeEnCurso();
+    });
+  }
+
+  Future<void> _pollViajeEnCurso() async {
+    if (!mounted || _viajeEnCursoVisible) return;
+
+    try {
+      if (_conductorId != null) {
+        final url = Uri.parse(
+          'https://fimeride.onrender.com/api/viajes/conductor/$_conductorId/en_curso/',
+        );
+        final response = await http.get(url).timeout(const Duration(seconds: 10));
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map<String, dynamic> && decoded['hay_viaje'] == true) {
+            await _abrirViajeEnCurso(ViajeEnCursoRol.conductor, _conductorId!);
+            return;
+          }
+        }
+      }
+
+      if (_pasajeroId != null) {
+        final url = Uri.parse(
+          'https://fimeride.onrender.com/api/viajes/pasajero/$_pasajeroId/en_curso/',
+        );
+        final response = await http.get(url).timeout(const Duration(seconds: 10));
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map<String, dynamic> && decoded['hay_viaje'] == true) {
+            await _abrirViajeEnCurso(ViajeEnCursoRol.pasajero, _pasajeroId!);
+          }
+        }
+      }
+    } catch (_) {
+      // El monitor seguirá intentando en el siguiente ciclo.
+    }
+  }
+
+  Future<void> _abrirViajeEnCurso(ViajeEnCursoRol rol, int rolId) async {
+    if (!mounted || _viajeEnCursoVisible) return;
+
+    _viajeEnCursoVisible = true;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ViajeEnProcesoScreen(
+          rol: rol,
+          rolId: rolId,
+          onViajeCerrado: () async {
+            await _viajeAlertService?.forceRefresh();
+          },
+        ),
+      ),
+    );
+    _viajeEnCursoVisible = false;
   }
 
   Future<void> _mostrarPopupConductor(Map<String, dynamic> viaje) async {
@@ -182,6 +261,11 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
           onRefresh: () async {
             await _viajeAlertService?.forceRefresh();
           },
+          onViajeIniciado: () async {
+            if (_conductorId != null) {
+              await _abrirViajeEnCurso(ViajeEnCursoRol.conductor, _conductorId!);
+            }
+          },
         ),
       ),
     );
@@ -204,6 +288,172 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
     );
     await _viajeAlertService?.forceRefresh();
   }
+
+  Future<void> _abrirViajeEnCursoDesdeDrawer() async {
+    if (_conductorId != null) {
+      await _abrirViajeEnCurso(ViajeEnCursoRol.conductor, _conductorId!);
+      return;
+    }
+    if (_pasajeroId != null) {
+      await _abrirViajeEnCurso(ViajeEnCursoRol.pasajero, _pasajeroId!);
+      return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No hay un perfil disponible para revisar viaje en curso.')),
+    );
+  }
+
+  // DEBUG_REMOVE_START
+  Future<void> _debugForzarConductorPopupYNotificacion() async {
+    final viaje = {
+      'id': -100,
+      'inicio': 'Monterrey Centro',
+      'destino': 'FIME',
+      'hora_salida': '08:00',
+    };
+
+    await LocalNotificationService.show(
+      id: 91001,
+      title: 'DEBUG Conductor',
+      body: 'Forzando notificacion de conductor',
+    );
+
+    await _mostrarPopupConductor(viaje);
+  }
+
+  Future<void> _debugForzarPasajeroPopupYNotificacion() async {
+    final viaje = {
+      'asignacion_id': -200,
+      'viaje_id': -201,
+      'inicio': 'Monterrey Centro',
+      'destino': 'FIME',
+      'hora_salida': '08:00',
+      'confirmado_por_conductor': true,
+    };
+
+    await LocalNotificationService.show(
+      id: 91002,
+      title: 'DEBUG Pasajero',
+      body: 'Forzando notificacion de pasajero',
+    );
+
+    await _mostrarPopupPasajero(viaje, esHoraSalida: false);
+  }
+
+  Future<void> _debugAbrirPreinicioConductor() async {
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PreinicioConductorScreen(
+          data: {
+            'viaje_id': -300,
+            'inicio': 'Monterrey Centro',
+            'destino': 'FIME',
+            'hora_salida': '08:00',
+            'conductor_nombre': 'Debug Conductor',
+            'vehiculo': 'Toyota Corolla 2020',
+            'placas_vehiculo': 'DBG-1234',
+            'origen_lat': 25.6866,
+            'origen_lng': -100.3161,
+            'destino_lat': 25.7250,
+            'destino_lng': -100.3134,
+            'pasajeros': [
+              {'asignacion_id': -1, 'nombre': 'Pasajero A', 'abordo_confirmado': true},
+              {'asignacion_id': -2, 'nombre': 'Pasajero B', 'abordo_confirmado': false},
+            ],
+            'puede_iniciar': false,
+            'puede_esperar_5_mas': true,
+          },
+          onRefresh: () async {},
+        ),
+      ),
+    );
+  }
+
+  Future<void> _debugAbrirPreinicioPasajero() async {
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PreinicioPasajeroScreen(
+          data: {
+            'asignacion_id': -400,
+            'viaje_id': -401,
+            'inicio': 'Monterrey Centro',
+            'destino': 'FIME',
+            'hora_salida': '08:00',
+          },
+          onConfirmarAbordo: () {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('DEBUG: abordaje confirmado (simulado).')),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _openDebugTripTools() {
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Debug Viajes (temporal)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _debugForzarConductorPopupYNotificacion();
+                  },
+                  icon: const Icon(Icons.notifications_active),
+                  label: const Text('Conductor: notificacion + popup'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _debugForzarPasajeroPopupYNotificacion();
+                  },
+                  icon: const Icon(Icons.notifications_active_outlined),
+                  label: const Text('Pasajero: notificacion + popup'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _debugAbrirPreinicioConductor();
+                  },
+                  icon: const Icon(Icons.route),
+                  label: const Text('Abrir preinicio conductor'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _debugAbrirPreinicioPasajero();
+                  },
+                  icon: const Icon(Icons.directions_car),
+                  label: const Text('Abrir preinicio pasajero'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+  // DEBUG_REMOVE_END
 
   Future<void> _checkConductorStatus() async {
     final prefs = await SharedPreferences.getInstance();
@@ -301,6 +551,14 @@ Future<void> _fetchUsuarioInfo() async {
     );
 
     return Scaffold(
+  floatingActionButton: _debugToolsEnabled
+      ? FloatingActionButton.small(
+          heroTag: 'debug_tools_fab',
+          onPressed: _openDebugTripTools,
+          backgroundColor: const Color.fromARGB(255, 0, 87, 54),
+          child: const Icon(Icons.bug_report, color: Colors.white),
+        )
+      : null,
   drawer: Drawer(
   child: ListView(
     padding: EdgeInsets.zero,
@@ -387,29 +645,9 @@ Future<void> _fetchUsuarioInfo() async {
       ListTile(
         leading: Icon(Icons.logout, color: Colors.red),
         title: Text('Viaje en curso', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-        onTap: () {
-          Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ViajeEnProcesoScreen(
-          startPoint: LatLng(25.6866, -100.3161),
-          endPoint: LatLng(25.7250, -100.3134),
-          direccionInicio: "Monterrey, NL",
-          direccionFinal: "Facultad de Ingeniería Mecánica y Eléctrica, UANL",
-          conductorNombre: "Juan Pérez",
-          conductorFoto: "https://example.com/foto.jpg",
-          modeloVehiculo: "Toyota Corolla 2020",
-          placasVehiculo: "ABC-1234",
-          mapboxAccessToken: "", 
-          /*
-          ejecutar flutter run --dart-define-from-file=.env 
-          teniendo este archivo en local con la key de la forma: 
-                mapboxAccessToken=tukey. 
-          para no tener que subir la key a github
-          */
-        ),
-      ),
-    );
+        onTap: () async {
+          Navigator.of(context).pop();
+          await _abrirViajeEnCursoDesdeDrawer();
         },
       ),
     ],
@@ -441,6 +679,7 @@ Future<void> _fetchUsuarioInfo() async {
                       child: Builder(
                         builder: (BuildContext context) {
                           return FloatingActionButton(
+                            heroTag: 'menu_drawer_fab',
                             onPressed: () {
                               Scaffold.of(context).openDrawer();
                             },

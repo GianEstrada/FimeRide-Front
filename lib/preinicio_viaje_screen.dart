@@ -9,11 +9,13 @@ import 'package:latlong2/latlong.dart';
 class PreinicioConductorScreen extends StatelessWidget {
   final Map<String, dynamic> data;
   final Future<void> Function() onRefresh;
+  final Future<void> Function()? onViajeIniciado;
 
   const PreinicioConductorScreen({
     super.key,
     required this.data,
     required this.onRefresh,
+    this.onViajeIniciado,
   });
 
   Future<void> _accionConductor(BuildContext context, String accion) async {
@@ -29,6 +31,9 @@ class PreinicioConductorScreen extends StatelessWidget {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (accion == 'iniciar' && context.mounted) {
         Navigator.of(context).pop();
+        if (onViajeIniciado != null) {
+          await onViajeIniciado!.call();
+        }
       }
       await onRefresh();
     } else {
