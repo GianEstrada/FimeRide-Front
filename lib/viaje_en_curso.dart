@@ -18,11 +18,13 @@ class ViajeEnProcesoScreen extends StatefulWidget {
     super.key,
     required this.rol,
     required this.rolId,
+    this.debugMockIfNoTrip = false,
     this.onViajeCerrado,
   });
 
   final ViajeEnCursoRol rol;
   final int rolId;
+  final bool debugMockIfNoTrip;
   final Future<void> Function()? onViajeCerrado;
 
   @override
@@ -30,6 +32,9 @@ class ViajeEnProcesoScreen extends StatefulWidget {
 }
 
 class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
+  static const Duration _tripPollFast = Duration(seconds: 10);
+  static const Duration _tripPollSlow = Duration(seconds: 45);
+
   final Distance _distance = const Distance();
 
   Timer? _pollTimer;
@@ -37,6 +42,8 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
   bool _isLoading = true;
   bool _hadActiveTrip = false;
   bool _closingScreen = false;
+  bool _isPollingTrip = false;
+  Duration _tripPollInterval = _tripPollSlow;
   bool _isSendingLocation = false;
   bool _locationDenied = false;
   String? _errorMessage;
@@ -66,15 +73,26 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
     }
 
     await _loadTrip(showLoader: true);
-    _pollTimer = Timer.periodic(const Duration(seconds: 12), (_) => _loadTrip());
+    _programarSiguientePollTrip();
 
     if (widget.rol == ViajeEnCursoRol.conductor) {
       await _startLocationTracking();
     }
   }
 
+  void _programarSiguientePollTrip() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer(_tripPollInterval, () async {
+      await _loadTrip();
+      if (!mounted || _closingScreen) return;
+      _programarSiguientePollTrip();
+    });
+  }
+
   Future<void> _loadTrip({bool showLoader = false}) async {
-    if (!mounted) return;
+    if (!mounted || _isPollingTrip) return;
+
+    _isPollingTrip = true;
 
     if (showLoader) {
       setState(() {
@@ -90,7 +108,18 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
       );
       final response = await http.get(url).timeout(const Duration(seconds: 12));
       if (response.statusCode != 200) {
-        throw Exception('No se pudo obtener el viaje en curso');
+        if (response.statusCode == 404) {
+          throw Exception(
+            'El backend desplegado no tiene el endpoint de viaje en curso. Actualiza Render con el último backend.',
+          );
+        }
+        final body = response.body.trim();
+        if (body.isNotEmpty) {
+          throw Exception(
+            'No se pudo obtener el viaje en curso (${response.statusCode}): $body',
+          );
+        }
+        throw Exception('No se pudo obtener el viaje en curso (${response.statusCode}).');
       }
 
       final decoded = jsonDecode(response.body);
@@ -99,6 +128,22 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
       }
 
       if (decoded['hay_viaje'] != true) {
+        if (widget.debugMockIfNoTrip) {
+          final mockTrip = _buildMockTrip();
+          final routeSnapshot = await _buildRouteSnapshot(mockTrip);
+          if (!mounted) return;
+          setState(() {
+            _hadActiveTrip = true;
+            _viaje = mockTrip;
+            _routePoints = routeSnapshot.points;
+            _instructions = routeSnapshot.instructions;
+            _isLoading = false;
+            _errorMessage = null;
+          });
+          return;
+        }
+
+        _tripPollInterval = _tripPollSlow;
         if (_hadActiveTrip) {
           await _closeScreen('El viaje terminó.');
           return;
@@ -120,6 +165,8 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
         throw Exception('El viaje en curso no contiene datos válidos');
       }
 
+      _tripPollInterval = _tripPollFast;
+
       final routeSnapshot = await _buildRouteSnapshot(viaje);
       if (!mounted) return;
 
@@ -137,7 +184,62 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
         _isLoading = false;
         _errorMessage = error.toString().replaceFirst('Exception: ', '');
       });
+    } finally {
+      _isPollingTrip = false;
     }
+  }
+
+  Map<String, dynamic> _buildMockTrip() {
+    if (widget.rol == ViajeEnCursoRol.pasajero) {
+      return <String, dynamic>{
+        'viaje_id': -900,
+        'inicio': 'Monterrey Centro',
+        'destino': 'FIME',
+        'conductor': {
+          'nombre': 'Conductor Debug',
+          'vehiculo': 'Nissan Versa 2022',
+          'placas': 'DBG-9012',
+        },
+        'origen': {'lat': 25.6866, 'lng': -100.3161},
+        'destino_final': {'lat': 25.7250, 'lng': -100.3134},
+        'conductor_posicion': {'lat': 25.7000, 'lng': -100.3150},
+        'tu_asignacion': {
+          'asignacion_id': -901,
+          'destino': {'lat': 25.7200, 'lng': -100.3140},
+          'distancia_a_tu_parada_metros': 180,
+          'parada_solicitada': false,
+          'parada': null,
+        },
+        'pasajeros': [
+          {'nombre': 'Tú', 'estado': 'en_vehiculo'},
+          {'nombre': 'Pasajero B', 'estado': 'pendiente_abordar'},
+        ],
+        'parada_activa': null,
+      };
+    }
+
+    return <String, dynamic>{
+      'viaje_id': -910,
+      'inicio': 'Monterrey Centro',
+      'destino': 'FIME',
+      'conductor': {
+        'nombre': 'Conductor Debug',
+        'vehiculo': 'Toyota Corolla 2020',
+        'placas': 'DBG-1234',
+      },
+      'origen': {'lat': 25.6866, 'lng': -100.3161},
+      'destino_final': {'lat': 25.7250, 'lng': -100.3134},
+      'conductor_posicion': {'lat': 25.7060, 'lng': -100.3149},
+      'pasajeros': [
+        {'nombre': 'Pasajero A', 'estado': 'en_vehiculo'},
+        {'nombre': 'Pasajero B', 'estado': 'bajo_del_vehiculo'},
+      ],
+      'parada_activa': {
+        'nombre': 'Pasajero A',
+        'ubicacion': {'lat': 25.7180, 'lng': -100.3142},
+      },
+      'tu_asignacion': null,
+    };
   }
 
   Future<void> _startLocationTracking() async {
@@ -894,6 +996,12 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
 
   Widget _buildInstructionsCard(ThemeData theme) {
     final stop = _viaje?['parada_activa'] as Map<String, dynamic>?;
+    final fallbackInstructions = <String>[
+      'Continúa 300 m por la vialidad principal',
+      'Mantente a la derecha para seguir hacia el destino',
+      'Reduce velocidad al aproximarte al punto de descenso',
+    ];
+    final shownInstructions = _instructions.isEmpty ? fallbackInstructions : _instructions;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -931,26 +1039,25 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
           const SizedBox(height: 12),
           if (_instructions.isEmpty)
             Text(
-              'Aún no hay indicaciones disponibles. Se actualizarán cuando llegue la posición del conductor.',
+              'Mostrando indicaciones de ejemplo mientras llega la ruta en tiempo real.',
               style: theme.textTheme.bodyMedium,
-            )
-          else
-            ..._instructions.map(
-              (instruction) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.only(top: 4),
-                      child: Icon(Icons.turn_slight_right, size: 18, color: Color(0xFF0B6E4F)),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(child: Text(instruction)),
-                  ],
-                ),
+            ),
+          ...shownInstructions.map(
+            (instruction) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Icon(Icons.turn_slight_right, size: 18, color: Color(0xFF0B6E4F)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(instruction)),
+                ],
               ),
             ),
+          ),
         ],
       ),
     );

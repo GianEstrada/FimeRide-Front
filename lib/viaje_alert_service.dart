@@ -33,6 +33,7 @@ class ViajeAlertService {
   final Set<int> _viajes5MinNotificados = <int>{};
   final Set<int> _viajesHoraSalidaNotificados = <int>{};
   bool _popupConductorActivo = false;
+  bool _isPolling = false;
 
   int _asInt(dynamic value, {int fallback = 0}) {
     if (value is int) return value;
@@ -67,10 +68,14 @@ class ViajeAlertService {
   }
 
   Future<void> _safePoll() async {
+    if (_isPolling) return;
+    _isPolling = true;
     try {
       await _poll();
     } catch (_) {
       // Evita que errores de red/parse rompan la app al abrir FimeRide.
+    } finally {
+      _isPolling = false;
     }
   }
 

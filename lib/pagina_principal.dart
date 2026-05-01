@@ -28,6 +28,9 @@ class PaginaPrincipal extends StatefulWidget {
 }
 
 class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingObserver {
+  static const Duration _monitorPollFast = Duration(seconds: 10);
+  static const Duration _monitorPollSlow = Duration(minutes: 1);
+
   // DEBUG_REMOVE_START: cambia a false o borra este bloque para quitar herramientas debug.
   static const bool _debugToolsEnabled = true;
   // DEBUG_REMOVE_END
@@ -42,6 +45,10 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
   Timer? _viajeEnCursoTimer;
   bool _preinicioConductorMostrado = false;
   bool _viajeEnCursoVisible = false;
+  bool _monitorViajeEnCursoActivo = true;
+  bool _isPollingViajeEnCurso = false;
+  Duration _monitorIntervalActual = _monitorPollSlow;
+  DateTime? _bloquearAutoAperturaHasta;
   int? _conductorId;
   int? _pasajeroId;
   final Set<int> _preinicioPasajeroMostrados = <int>{};
@@ -67,6 +74,17 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _monitorViajeEnCursoActivo = state == AppLifecycleState.resumed;
+    if (_monitorViajeEnCursoActivo) {
+      _pollViajeEnCurso();
+      _programarMonitorViajeEnCurso();
+    } else {
+      _viajeEnCursoTimer?.cancel();
+    }
+  }
+
   Future<void> _initAlertasViaje() async {
     final prefs = await SharedPreferences.getInstance();
     final conductorId = prefs.getInt('conductor_id');
@@ -88,45 +106,96 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
   }
 
   void _initMonitorViajeEnCurso() {
-    _viajeEnCursoTimer?.cancel();
+    _monitorIntervalActual = _monitorPollSlow;
     _pollViajeEnCurso();
-    _viajeEnCursoTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    _programarMonitorViajeEnCurso();
+  }
+
+  void _programarMonitorViajeEnCurso() {
+    _viajeEnCursoTimer?.cancel();
+    _viajeEnCursoTimer = Timer.periodic(_monitorIntervalActual, (_) {
       _pollViajeEnCurso();
     });
   }
 
-  Future<void> _pollViajeEnCurso() async {
-    if (!mounted || _viajeEnCursoVisible) return;
+  void _actualizarFrecuenciaMonitor(bool hayViajeActivo) {
+    final nuevoIntervalo = hayViajeActivo ? _monitorPollFast : _monitorPollSlow;
+    if (nuevoIntervalo == _monitorIntervalActual) return;
 
+    _monitorIntervalActual = nuevoIntervalo;
+    if (_monitorViajeEnCursoActivo) {
+      _programarMonitorViajeEnCurso();
+    }
+  }
+
+  (ViajeEnCursoRol, int)? _rolPreferido() {
+    if (_isConductor && _conductorId != null) {
+      return (ViajeEnCursoRol.conductor, _conductorId!);
+    }
+    if (!_isConductor && _pasajeroId != null) {
+      return (ViajeEnCursoRol.pasajero, _pasajeroId!);
+    }
+    if (_conductorId != null) {
+      return (ViajeEnCursoRol.conductor, _conductorId!);
+    }
+    if (_pasajeroId != null) {
+      return (ViajeEnCursoRol.pasajero, _pasajeroId!);
+    }
+    return null;
+  }
+
+  Future<bool> _hayViajeEnCurso(ViajeEnCursoRol rol, int rolId) async {
+    final roleSegment = rol == ViajeEnCursoRol.conductor ? 'conductor' : 'pasajero';
+    final url = Uri.parse(
+      'https://fimeride.onrender.com/api/viajes/$roleSegment/$rolId/en_curso/',
+    );
+    final response = await http.get(url).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) return false;
+    final decoded = jsonDecode(response.body);
+    return decoded is Map<String, dynamic> && decoded['hay_viaje'] == true;
+  }
+
+  Future<void> _pollViajeEnCurso() async {
+    if (!mounted || !_monitorViajeEnCursoActivo || _viajeEnCursoVisible || _isPollingViajeEnCurso) {
+      return;
+    }
+    if (_bloquearAutoAperturaHasta != null && DateTime.now().isBefore(_bloquearAutoAperturaHasta!)) {
+      return;
+    }
+
+    _isPollingViajeEnCurso = true;
+    bool hayViajeActivo = false;
     try {
-      if (_conductorId != null) {
-        final url = Uri.parse(
-          'https://fimeride.onrender.com/api/viajes/conductor/$_conductorId/en_curso/',
-        );
-        final response = await http.get(url).timeout(const Duration(seconds: 10));
-        if (response.statusCode == 200) {
-          final decoded = jsonDecode(response.body);
-          if (decoded is Map<String, dynamic> && decoded['hay_viaje'] == true) {
-            await _abrirViajeEnCurso(ViajeEnCursoRol.conductor, _conductorId!);
-            return;
-          }
-        }
+      final preferido = _rolPreferido();
+      if (preferido == null) return;
+
+      final (rol, rolId) = preferido;
+      final hayViaje = await _hayViajeEnCurso(rol, rolId);
+      hayViajeActivo = hayViaje;
+      if (hayViaje) {
+        await _abrirViajeEnCurso(rol, rolId);
+        return;
       }
 
-      if (_pasajeroId != null) {
-        final url = Uri.parse(
-          'https://fimeride.onrender.com/api/viajes/pasajero/$_pasajeroId/en_curso/',
-        );
-        final response = await http.get(url).timeout(const Duration(seconds: 10));
-        if (response.statusCode == 200) {
-          final decoded = jsonDecode(response.body);
-          if (decoded is Map<String, dynamic> && decoded['hay_viaje'] == true) {
-            await _abrirViajeEnCurso(ViajeEnCursoRol.pasajero, _pasajeroId!);
-          }
+      // Si no hay viaje en el rol preferido, intenta el otro rol una vez.
+      if (rol == ViajeEnCursoRol.conductor && _pasajeroId != null) {
+        final hayViajePasajero = await _hayViajeEnCurso(ViajeEnCursoRol.pasajero, _pasajeroId!);
+        hayViajeActivo = hayViajePasajero;
+        if (hayViajePasajero) {
+          await _abrirViajeEnCurso(ViajeEnCursoRol.pasajero, _pasajeroId!);
+        }
+      } else if (rol == ViajeEnCursoRol.pasajero && _conductorId != null) {
+        final hayViajeConductor = await _hayViajeEnCurso(ViajeEnCursoRol.conductor, _conductorId!);
+        hayViajeActivo = hayViajeConductor;
+        if (hayViajeConductor) {
+          await _abrirViajeEnCurso(ViajeEnCursoRol.conductor, _conductorId!);
         }
       }
     } catch (_) {
       // El monitor seguirá intentando en el siguiente ciclo.
+    } finally {
+      _actualizarFrecuenciaMonitor(hayViajeActivo);
+      _isPollingViajeEnCurso = false;
     }
   }
 
@@ -147,6 +216,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
       ),
     );
     _viajeEnCursoVisible = false;
+    _bloquearAutoAperturaHasta = DateTime.now().add(const Duration(seconds: 20));
   }
 
   Future<void> _mostrarPopupConductor(Map<String, dynamic> viaje) async {
@@ -289,20 +359,16 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
     await _viajeAlertService?.forceRefresh();
   }
 
-  Future<void> _abrirViajeEnCursoDesdeDrawer() async {
-    if (_conductorId != null) {
-      await _abrirViajeEnCurso(ViajeEnCursoRol.conductor, _conductorId!);
-      return;
+  Future<void> _forzarViajeEnCursoTemporal(ViajeEnCursoRol rol, int rolId) async {
+    try {
+      final roleSegment = rol == ViajeEnCursoRol.conductor ? 'conductor' : 'pasajero';
+      final url = Uri.parse(
+        'https://fimeride.onrender.com/api/viajes/$roleSegment/$rolId/forzar_en_curso/',
+      );
+      await http.post(url, headers: {'Content-Type': 'application/json'});
+    } catch (_) {
+      // Si falla el forzado, la vista igual intentará abrir con el estado real.
     }
-    if (_pasajeroId != null) {
-      await _abrirViajeEnCurso(ViajeEnCursoRol.pasajero, _pasajeroId!);
-      return;
-    }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No hay un perfil disponible para revisar viaje en curso.')),
-    );
   }
 
   // DEBUG_REMOVE_START
@@ -397,6 +463,60 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
     );
   }
 
+  Future<void> _debugForzarVistaViajeEnCursoConductor() async {
+    final conductorIdDebug = _conductorId ?? 17;
+    if (_conductorId == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('DEBUG: usando conductor_id placeholder (17).')),
+      );
+    }
+
+    await _forzarViajeEnCursoTemporal(ViajeEnCursoRol.conductor, conductorIdDebug);
+    if (!mounted || _viajeEnCursoVisible) return;
+    _viajeEnCursoVisible = true;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ViajeEnProcesoScreen(
+          rol: ViajeEnCursoRol.conductor,
+          rolId: conductorIdDebug,
+          debugMockIfNoTrip: true,
+          onViajeCerrado: () async {
+            await _viajeAlertService?.forceRefresh();
+          },
+        ),
+      ),
+    );
+    _viajeEnCursoVisible = false;
+  }
+
+  Future<void> _debugForzarVistaViajeEnCursoPasajero() async {
+    final pasajeroIdDebug = _pasajeroId ?? 18;
+    if (_pasajeroId == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('DEBUG: usando pasajero_id placeholder (18).')),
+      );
+    }
+
+    await _forzarViajeEnCursoTemporal(ViajeEnCursoRol.pasajero, pasajeroIdDebug);
+    if (!mounted || _viajeEnCursoVisible) return;
+    _viajeEnCursoVisible = true;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ViajeEnProcesoScreen(
+          rol: ViajeEnCursoRol.pasajero,
+          rolId: pasajeroIdDebug,
+          debugMockIfNoTrip: true,
+          onViajeCerrado: () async {
+            await _viajeAlertService?.forceRefresh();
+          },
+        ),
+      ),
+    );
+    _viajeEnCursoVisible = false;
+  }
+
   void _openDebugTripTools() {
     if (!mounted) return;
     showModalBottomSheet(
@@ -445,6 +565,22 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
                   },
                   icon: const Icon(Icons.directions_car),
                   label: const Text('Abrir preinicio pasajero'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _debugForzarVistaViajeEnCursoConductor();
+                  },
+                  icon: const Icon(Icons.play_circle_outline),
+                  label: const Text('Forzar viaje en curso (Conductor)'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _debugForzarVistaViajeEnCursoPasajero();
+                  },
+                  icon: const Icon(Icons.play_circle_fill),
+                  label: const Text('Forzar viaje en curso (Pasajero)'),
                 ),
               ],
             ),
@@ -640,14 +776,6 @@ Future<void> _fetchUsuarioInfo() async {
         title: Text('Cerrar Sesión', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
         onTap: () {
           _cerrarSesion(context);
-        },
-      ),
-      ListTile(
-        leading: Icon(Icons.logout, color: Colors.red),
-        title: Text('Viaje en curso', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-        onTap: () async {
-          Navigator.of(context).pop();
-          await _abrirViajeEnCursoDesdeDrawer();
         },
       ),
     ],
