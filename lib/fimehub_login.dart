@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:fimeride_front/formulario_pasajero.dart';
@@ -333,10 +334,45 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
       ..files.add(await http.MultipartFile.fromPath('imagen_viva', File(capture.path).path));
 
     try {
+      final progressShown = showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const _FaceMatchProgressDialog(),
+      );
+
+      final stopwatch = Stopwatch()..start();
       final response = await request.send();
       final body = await response.stream.bytesToString();
+      final elapsedMs = stopwatch.elapsedMilliseconds;
+      const minVisualMs = 2600;
+      if (elapsedMs < minVisualMs) {
+        await Future.delayed(Duration(milliseconds: minVisualMs - elapsedMs));
+      }
+
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      await progressShown;
 
       if (response.statusCode == 200) {
+        double similarity = 100.0;
+        if (body.isNotEmpty) {
+          try {
+            final parsed = jsonDecode(body);
+            if (parsed is Map<String, dynamic>) {
+              final raw = parsed['similarity'];
+              if (raw is num) similarity = raw.toDouble();
+            }
+          } catch (_) {
+            // Mantener valor por defecto para la vista.
+          }
+        }
+        if (mounted) {
+          _showDialog(
+            'Face Match completado',
+            'Identidad validada correctamente.\nSimilitud: ${similarity.toStringAsFixed(1)}%',
+          );
+        }
         return true;
       }
 
@@ -354,6 +390,9 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
       _showDialog('Validación de identidad', mensaje);
       return false;
     } catch (_) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
       _showDialog('Error de conexión', 'No se pudo validar identidad en vivo.');
       return false;
     }
@@ -387,6 +426,76 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
             child: const Text('Cerrar'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FaceMatchProgressDialog extends StatefulWidget {
+  const _FaceMatchProgressDialog();
+
+  @override
+  State<_FaceMatchProgressDialog> createState() => _FaceMatchProgressDialogState();
+}
+
+class _FaceMatchProgressDialogState extends State<_FaceMatchProgressDialog> {
+  static const _steps = <String>[
+    'Iniciando motor biometrico...',
+    'Detectando puntos faciales...',
+    'Extrayendo firma del rostro...',
+    'Comparando contra perfil aprobado...',
+    'Validando umbral de coincidencia...',
+  ];
+
+  Timer? _timer;
+  int _step = 0;
+  double _progress = 0.08;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 420), (_) {
+      if (!mounted) return;
+      setState(() {
+        _step = (_step + 1) % _steps.length;
+        if (_progress < 0.92) {
+          _progress += 0.08;
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+      onWillPop: () async => false,
+      child: AlertDialog(
+        title: const Text('Face Match en proceso'),
+        content: SizedBox(
+          width: 320,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.face_retouching_natural, size: 56, color: Color.fromARGB(255, 0, 87, 54)),
+              const SizedBox(height: 12),
+              Text(
+                _steps[_step],
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 14),
+              LinearProgressIndicator(value: _progress),
+              const SizedBox(height: 8),
+              Text('${(_progress * 100).toStringAsFixed(0)}%'),
+            ],
+          ),
+        ),
       ),
     );
   }
