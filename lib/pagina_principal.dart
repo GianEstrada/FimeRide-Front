@@ -1,4 +1,4 @@
-import 'dart:async';
+alimport 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -261,15 +261,15 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
     if (!esHoraSalida) {
       await showDialog(
         context: context,
-        barrierDismissible: true,
+        barrierDismissible: false,
         builder: (context) {
           return AlertDialog(
             title: const Text('Recordatorio de viaje'),
             content: Text(mensajeBase),
             actions: [
-              IconButton(
+              TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close),
+                child: const Text('Entendido'),
               ),
             ],
           );

@@ -75,9 +75,7 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
     await _loadTrip(showLoader: true);
     _programarSiguientePollTrip();
 
-    if (widget.rol == ViajeEnCursoRol.conductor) {
-      await _startLocationTracking();
-    }
+    await _startLocationTracking();
   }
 
   void _programarSiguientePollTrip() {
@@ -102,7 +100,8 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
     }
 
     try {
-      final roleSegment = widget.rol == ViajeEnCursoRol.conductor ? 'conductor' : 'pasajero';
+      final roleSegment =
+          widget.rol == ViajeEnCursoRol.conductor ? 'conductor' : 'pasajero';
       final url = Uri.parse(
         'https://fimeride.onrender.com/api/viajes/$roleSegment/${widget.rolId}/en_curso/',
       );
@@ -119,7 +118,9 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
             'No se pudo obtener el viaje en curso (${response.statusCode}): $body',
           );
         }
-        throw Exception('No se pudo obtener el viaje en curso (${response.statusCode}).');
+        throw Exception(
+          'No se pudo obtener el viaje en curso (${response.statusCode}).',
+        );
       }
 
       final decoded = jsonDecode(response.body);
@@ -266,7 +267,11 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
     }
 
     final currentPosition = await Geolocator.getCurrentPosition();
-    await _sendConductorLocation(currentPosition);
+    if (widget.rol == ViajeEnCursoRol.conductor) {
+      await _sendConductorLocation(currentPosition);
+    } else {
+      await _sendPasajeroLocation(currentPosition);
+    }
 
     _positionSubscription?.cancel();
     _positionSubscription = Geolocator.getPositionStream(
@@ -275,7 +280,11 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
         distanceFilter: 15,
       ),
     ).listen((position) async {
-      await _sendConductorLocation(position);
+      if (widget.rol == ViajeEnCursoRol.conductor) {
+        await _sendConductorLocation(position);
+      } else {
+        await _sendPasajeroLocation(position);
+      }
     });
 
     if (!mounted) return;
@@ -298,17 +307,39 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'lat': position.latitude,
-          'lng': position.longitude,
-        }),
+        body: jsonEncode({'lat': position.latitude, 'lng': position.longitude}),
       );
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
-        if (decoded is Map<String, dynamic> && decoded['viaje_finalizado'] == true) {
+        if (decoded is Map<String, dynamic> &&
+            decoded['viaje_finalizado'] == true) {
           await _closeScreen('Llegaste al destino final.');
         }
       }
+    } catch (_) {
+      // El polling continuará actualizando el estado del viaje.
+    } finally {
+      _isSendingLocation = false;
+    }
+  }
+
+  Future<void> _sendPasajeroLocation(Position position) async {
+    if (_isSendingLocation) return;
+
+    final tuAsignacion = _viaje?['tu_asignacion'] as Map<String, dynamic>?;
+    final asignacionId = _asInt(tuAsignacion?['asignacion_id']);
+    if (asignacionId == null) return;
+
+    _isSendingLocation = true;
+    try {
+      final url = Uri.parse(
+        'https://fimeride.onrender.com/api/asignaciones/$asignacionId/ubicacion_pasajero/',
+      );
+      await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'lat': position.latitude, 'lng': position.longitude}),
+      );
     } catch (_) {
       // El polling continuará actualizando el estado del viaje.
     } finally {
@@ -324,27 +355,51 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
     await widget.onViajeCerrado?.call();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
     await Navigator.of(context).maybePop();
   }
 
   Future<_RouteSnapshot> _buildRouteSnapshot(Map<String, dynamic> viaje) async {
-    final current = _readPoint(viaje['conductor_posicion']) ?? _readPoint(viaje['origen']);
-    final destination = widget.rol == ViajeEnCursoRol.conductor
-        ? _readPoint(viaje['destino_final'])
-      : (_manualStopPoint ?? _readPoint((viaje['tu_asignacion'] as Map<String, dynamic>?)?['destino']));
-    final stopReference = widget.rol == ViajeEnCursoRol.conductor
-        ? _readStopReference(viaje['parada_activa'] as Map<String, dynamic>?)
-        : _readPassengerStopReference((viaje['tu_asignacion'] as Map<String, dynamic>?)?['parada']);
+    final conductorConfirmado = viaje['confirmado_por_conductor'] == true;
+    final current =
+      widget.rol == ViajeEnCursoRol.pasajero
+        ? (conductorConfirmado ? _readPoint(viaje['conductor_posicion']) : null)
+        : (_readPoint(viaje['conductor_posicion']) ?? _readPoint(viaje['origen']));
+    final userCurrent = _readPoint(viaje['usuario_posicion']);
+    final destination =
+        widget.rol == ViajeEnCursoRol.conductor
+            ? _readPoint(viaje['destino_final'])
+            : (_manualStopPoint ??
+                _readPoint(
+                  (viaje['tu_asignacion'] as Map<String, dynamic>?)?['destino'],
+                ));
+    final stopReference =
+        widget.rol == ViajeEnCursoRol.conductor
+            ? _readStopReference(
+              viaje['parada_activa'] as Map<String, dynamic>?,
+            )
+            : _readPassengerStopReference(
+              (viaje['tu_asignacion'] as Map<String, dynamic>?)?['parada'],
+            );
 
     final waypoints = <LatLng>[];
     if (current != null) {
       waypoints.add(current);
     }
-    if (stopReference != null && current != null && !_samePoint(current, stopReference)) {
+    if (widget.rol == ViajeEnCursoRol.pasajero &&
+        userCurrent != null &&
+        (waypoints.isEmpty || !_samePoint(waypoints.last, userCurrent))) {
+      waypoints.insert(0, userCurrent);
+    }
+    if (stopReference != null &&
+        current != null &&
+        !_samePoint(current, stopReference)) {
       waypoints.add(stopReference);
     }
-    if (destination != null && (waypoints.isEmpty || !_samePoint(waypoints.last, destination))) {
+    if (destination != null &&
+        (waypoints.isEmpty || !_samePoint(waypoints.last, destination))) {
       waypoints.add(destination);
     }
 
@@ -373,15 +428,19 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
 
     final route = routes.first as Map<String, dynamic>;
     final geometry = route['geometry'] as Map<String, dynamic>?;
-    final coordinatesList = geometry?['coordinates'] as List<dynamic>? ?? <dynamic>[];
-    final points = coordinatesList
-        .whereType<List<dynamic>>()
-        .where((coordinate) => coordinate.length >= 2)
-        .map((coordinate) => LatLng(
-              (coordinate[1] as num).toDouble(),
-              (coordinate[0] as num).toDouble(),
-            ))
-        .toList();
+    final coordinatesList =
+        geometry?['coordinates'] as List<dynamic>? ?? <dynamic>[];
+    final points =
+        coordinatesList
+            .whereType<List<dynamic>>()
+            .where((coordinate) => coordinate.length >= 2)
+            .map(
+              (coordinate) => LatLng(
+                (coordinate[1] as num).toDouble(),
+                (coordinate[0] as num).toDouble(),
+              ),
+            )
+            .toList();
 
     final instructions = <String>[];
     final legs = route['legs'] as List<dynamic>? ?? <dynamic>[];
@@ -396,7 +455,10 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
       }
     }
 
-    return _RouteSnapshot(points: points, instructions: instructions.take(8).toList());
+    return _RouteSnapshot(
+      points: points,
+      instructions: instructions.take(8).toList(),
+    );
   }
 
   Future<void> _requestStop() async {
@@ -426,7 +488,9 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
       );
     }
   }
@@ -457,7 +521,9 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
       );
     }
   }
@@ -509,7 +575,9 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
       if (descripcion.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Escribe una breve descripción del reporte.')),
+          const SnackBar(
+            content: Text('Escribe una breve descripción del reporte.'),
+          ),
         );
         return;
       }
@@ -519,7 +587,11 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
       if (usuarioId == null || viajeId == null) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo identificar usuario o viaje para reportar.')),
+          const SnackBar(
+            content: Text(
+              'No se pudo identificar usuario o viaje para reportar.',
+            ),
+          ),
         );
         return;
       }
@@ -530,7 +602,10 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
         body: jsonEncode({
           'usuario_id': usuarioId,
           'viaje_id': viajeId,
-          'rol_reportante': widget.rol == ViajeEnCursoRol.conductor ? 'conductor' : 'pasajero',
+          'rol_reportante':
+              widget.rol == ViajeEnCursoRol.conductor
+                  ? 'conductor'
+                  : 'pasajero',
           'categoria': categoria,
           'canal_preferido': canal,
           'descripcion': descripcion,
@@ -540,11 +615,15 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
       if (!mounted) return;
       if (response.statusCode >= 200 && response.statusCode < 300) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Reporte enviado y registrado con éxito.')),
+          const SnackBar(
+            content: Text('Reporte enviado y registrado con éxito.'),
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo registrar el reporte: ${response.body}')),
+          SnackBar(
+            content: Text('No se pudo registrar el reporte: ${response.body}'),
+          ),
         );
       }
     }
@@ -571,9 +650,18 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
                       initialValue: categoria,
                       decoration: const InputDecoration(labelText: 'Categoría'),
                       items: const [
-                        DropdownMenuItem(value: 'conduccion', child: Text('Conducción')), 
-                        DropdownMenuItem(value: 'seguridad', child: Text('Seguridad')), 
-                        DropdownMenuItem(value: 'vehiculo', child: Text('Vehículo')), 
+                        DropdownMenuItem(
+                          value: 'conduccion',
+                          child: Text('Conducción'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'seguridad',
+                          child: Text('Seguridad'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'vehiculo',
+                          child: Text('Vehículo'),
+                        ),
                         DropdownMenuItem(value: 'otro', child: Text('Otro')),
                       ],
                       onChanged: (value) {
@@ -584,10 +672,18 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
                       initialValue: canal,
-                      decoration: const InputDecoration(labelText: 'Canal preferido'),
+                      decoration: const InputDecoration(
+                        labelText: 'Canal preferido',
+                      ),
                       items: const [
-                        DropdownMenuItem(value: 'correo', child: Text('Correo')), 
-                        DropdownMenuItem(value: 'telefono', child: Text('Teléfono')),
+                        DropdownMenuItem(
+                          value: 'correo',
+                          child: Text('Correo'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'telefono',
+                          child: Text('Teléfono'),
+                        ),
                       ],
                       onChanged: (value) {
                         if (value == null) return;
@@ -624,7 +720,9 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
                 if (!context.mounted) return;
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Correo copiado al portapapeles.')),
+                  const SnackBar(
+                    content: Text('Correo copiado al portapapeles.'),
+                  ),
                 );
               },
               child: const Text('Copiar correo'),
@@ -632,7 +730,7 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
             TextButton(
               onPressed: () async {
                 await enviarReporte();
-                final uri = Uri.parse('tel:$telefonoSoporte');
+                fipara los ri = Uri.parse('tel:$telefonoSoporte');
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
                 if (!context.mounted) return;
                 Navigator.of(context).pop();
@@ -645,9 +743,7 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
                 final uri = Uri(
                   scheme: 'mailto',
                   path: correoSoporte,
-                  queryParameters: <String, String>{
-                    'subject': asunto,
-                  },
+                  queryParameters: <String, String>{'subject': asunto},
                 );
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
                 if (!context.mounted) return;
@@ -674,30 +770,34 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isConductor ? 'Viaje en curso del conductor' : 'Tu viaje en curso'),
+        title: Text(
+          isConductor ? 'Viaje en curso del conductor' : 'Tu viaje en curso',
+        ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _errorMessage != null
               ? _buildErrorState(theme)
               : _viaje == null
-                  ? _buildEmptyState(theme)
-                  : RefreshIndicator(
-                      onRefresh: _loadTrip,
-                      child: ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          if (_locationDenied && isConductor) _buildLocationWarning(theme),
-                          _buildHeroCard(theme, isConductor),
-                          const SizedBox(height: 16),
-                          _buildMapCard(theme, isConductor),
-                          const SizedBox(height: 16),
-                          if (isConductor) _buildInstructionsCard(theme),
-                          if (!isConductor) _buildPassengerInfo(theme),
-                          if (isConductor) _buildPassengersCard(theme),
-                        ],
-                      ),
-                    ),
+              ? _buildEmptyState(theme)
+              : RefreshIndicator(
+                onRefresh: _loadTrip,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (_locationDenied && isConductor)
+                      _buildLocationWarning(theme),
+                    _buildHeroCard(theme, isConductor),
+                    const SizedBox(height: 16),
+                    _buildMapCard(theme, isConductor),
+                    const SizedBox(height: 16),
+                    if (isConductor) _buildInstructionsCard(theme),
+                    if (!isConductor) _buildPassengerInfo(theme),
+                    if (isConductor) _buildPassengersCard(theme),
+                  ],
+                ),
+              ),
     );
   }
 
@@ -712,18 +812,28 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
       ),
       child: Text(
         'Activa ubicación y permisos para actualizar la ruta del pasajero en tiempo real.',
-        style: theme.textTheme.bodyMedium?.copyWith(color: Colors.orange.shade900),
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: Colors.orange.shade900,
+        ),
       ),
     );
   }
 
   Widget _buildHeroCard(ThemeData theme, bool isConductor) {
-    final conductor = _viaje?['conductor'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final conductor =
+        _viaje?['conductor'] as Map<String, dynamic>? ?? <String, dynamic>{};
     final tuAsignacion = _viaje?['tu_asignacion'] as Map<String, dynamic>?;
-    final distanciaParada = _asInt(tuAsignacion?['distancia_a_tu_parada_metros']);
-    final estado = isConductor
-        ? ((_viaje?['parada_activa'] != null) ? 'Hay una parada solicitada' : 'Ruta hacia destino final')
-        : (tuAsignacion?['parada_solicitada'] == true ? 'Parada solicitada' : 'Sigues en ruta');
+    final distanciaParada = _asInt(
+      tuAsignacion?['distancia_a_tu_parada_metros'],
+    );
+    final estado =
+        isConductor
+            ? ((_viaje?['parada_activa'] != null)
+                ? 'Hay una parada solicitada'
+                : 'Ruta hacia destino final')
+            : (tuAsignacion?['parada_solicitada'] == true
+                ? 'Parada solicitada'
+                : 'Sigues en ruta');
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -756,11 +866,20 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
             runSpacing: 10,
             children: [
               _pill('Estado', estado),
-              _pill('Conductor', conductor['nombre']?.toString() ?? 'Sin nombre'),
-              _pill('Vehículo', conductor['vehiculo']?.toString() ?? 'Sin vehículo'),
+              _pill(
+                'Conductor',
+                conductor['nombre']?.toString() ?? 'Sin nombre',
+              ),
+              _pill(
+                'Vehículo',
+                conductor['vehiculo']?.toString() ?? 'Sin vehículo',
+              ),
               _pill('Placas', conductor['placas']?.toString() ?? 'Sin placas'),
               if (!isConductor && distanciaParada != null)
-                _pill('Distancia a tu parada', _formatDistance(distanciaParada.toDouble())),
+                _pill(
+                  'Distancia a tu parada',
+                  _formatDistance(distanciaParada.toDouble()),
+                ),
             ],
           ),
         ],
@@ -769,13 +888,28 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
   }
 
   Widget _buildMapCard(ThemeData theme, bool isConductor) {
-    final current = _readPoint(_viaje?['conductor_posicion']) ?? _readPoint(_viaje?['origen']);
-    final destination = isConductor
-        ? _readPoint(_viaje?['destino_final'])
-        : (_manualStopPoint ?? _readPoint((_viaje?['tu_asignacion'] as Map<String, dynamic>?)?['destino']));
-    final stopReference = isConductor
-        ? _readStopReference(_viaje?['parada_activa'] as Map<String, dynamic>?)
-        : _readPassengerStopReference((_viaje?['tu_asignacion'] as Map<String, dynamic>?)?['parada']);
+    final conductorConfirmado = _viaje?['confirmado_por_conductor'] == true;
+    final current =
+      isConductor
+        ? (_readPoint(_viaje?['conductor_posicion']) ?? _readPoint(_viaje?['origen']))
+        : (conductorConfirmado ? _readPoint(_viaje?['conductor_posicion']) : null);
+    final userCurrent = _readPoint(_viaje?['usuario_posicion']);
+    final destination =
+        isConductor
+            ? _readPoint(_viaje?['destino_final'])
+            : (_manualStopPoint ??
+                _readPoint(
+                  (_viaje?['tu_asignacion']
+                      as Map<String, dynamic>?)?['destino'],
+                ));
+    final stopReference =
+        isConductor
+            ? _readStopReference(
+              _viaje?['parada_activa'] as Map<String, dynamic>?,
+            )
+            : _readPassengerStopReference(
+              (_viaje?['tu_asignacion'] as Map<String, dynamic>?)?['parada'],
+            );
 
     final markers = <Marker>[];
     if (current != null) {
@@ -784,7 +918,24 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
           point: current,
           width: 52,
           height: 52,
-          builder: (_) => const Icon(Icons.directions_car, color: Colors.green, size: 36),
+          builder:
+              (_) => const Icon(
+                Icons.directions_car,
+                color: Colors.green,
+                size: 36,
+              ),
+        ),
+      );
+    }
+    if (userCurrent != null) {
+      markers.add(
+        Marker(
+          point: userCurrent,
+          width: 52,
+          height: 52,
+          builder:
+              (_) =>
+                  const Icon(Icons.my_location, color: Colors.blue, size: 30),
         ),
       );
     }
@@ -794,7 +945,9 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
           point: destination,
           width: 52,
           height: 52,
-          builder: (_) => const Icon(Icons.location_pin, color: Colors.red, size: 38),
+          builder:
+              (_) =>
+                  const Icon(Icons.location_pin, color: Colors.red, size: 38),
         ),
       );
     }
@@ -814,26 +967,35 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
           point: stopReference,
           width: 52,
           height: 52,
-          builder: (_) => const Icon(Icons.flag_circle, color: Colors.orange, size: 34),
+          builder:
+              (_) =>
+                  const Icon(Icons.flag_circle, color: Colors.orange, size: 34),
         ),
       );
     }
-
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 16, offset: Offset(0, 8)),
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            isConductor ? 'Ruta e indicaciones' : 'Ruta con ubicación del conductor',
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            isConductor
+                ? 'Ruta e indicaciones con tu posición en tiempo real'
+                : 'Ruta con ubicación del conductor',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -842,16 +1004,21 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
               borderRadius: BorderRadius.circular(18),
               child: FlutterMap(
                 options: MapOptions(
-                  center: current ?? destination ?? LatLng(25.6866, -100.3161),
+                  center:
+                      userCurrent ??
+                      current ??
+                      destination ??
+                      LatLng(25.6866, -100.3161),
                   zoom: 14,
-                  onLongPress: isConductor
-                      ? null
-                      : (_, point) {
-                          setState(() {
-                            _manualStopPoint = point;
-                          });
-                          _loadTrip();
-                        },
+                  onLongPress:
+                      isConductor
+                          ? null
+                          : (_, point) {
+                            setState(() {
+                              _manualStopPoint = point;
+                            });
+                            _loadTrip();
+                          },
                 ),
                 children: [
                   TileLayer(
@@ -875,9 +1042,19 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
           ),
           if (!isConductor) ...[
             const SizedBox(height: 12),
+            if (!conductorConfirmado)
+              Text(
+                'La ubicación del conductor se mostrará cuando confirme el viaje.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.orange.shade900,
+                ),
+              ),
+            if (!conductorConfirmado) const SizedBox(height: 8),
             Text(
               'Mantén presionado el mapa para marcar una parada intermedia.',
-              style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade700),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: Colors.grey.shade700,
+              ),
             ),
             const SizedBox(height: 8),
             _buildPassengerActions(theme),
@@ -888,16 +1065,22 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
   }
 
   Widget _buildPassengerActions(ThemeData theme) {
-    final tuAsignacion = _viaje?['tu_asignacion'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final tuAsignacion =
+        _viaje?['tu_asignacion'] as Map<String, dynamic>? ??
+        <String, dynamic>{};
     final stopRequested = tuAsignacion['parada_solicitada'] == true;
-    final currentPoint = _readPoint(_viaje?['conductor_posicion']) ?? _readPoint(_viaje?['origen']);
+    final currentPoint =
+        _readPoint(_viaje?['conductor_posicion']) ??
+        _readPoint(_viaje?['origen']);
     final selectedPoint = _manualStopPoint;
-    final selectedDistance = selectedPoint != null && currentPoint != null
-      ? _distance.as(LengthUnit.Meter, currentPoint, selectedPoint)
-      : null;
-    final canRequestStop = selectedDistance != null
-      ? selectedDistance <= 200 && !stopRequested
-      : tuAsignacion['puede_solicitar_parada'] == true;
+    final selectedDistance =
+        selectedPoint != null && currentPoint != null
+            ? _distance.as(LengthUnit.Meter, currentPoint, selectedPoint)
+            : null;
+    final canRequestStop =
+        selectedDistance != null
+            ? selectedDistance <= 200 && !stopRequested
+            : tuAsignacion['puede_solicitar_parada'] == true;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -941,13 +1124,16 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: stopRequested
-                    ? _showStopStatusDialog
-                    : canRequestStop
+                onPressed:
+                    stopRequested
+                        ? _showStopStatusDialog
+                        : canRequestStop
                         ? _requestStop
                         : null,
                 icon: const Icon(Icons.flag),
-                label: Text(stopRequested ? 'Estado de parada' : 'Terminar mi viaje'),
+                label: Text(
+                  stopRequested ? 'Estado de parada' : 'Terminar mi viaje',
+                ),
               ),
             ),
           ],
@@ -959,7 +1145,9 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
               selectedDistance != null
                   ? 'Faltan ${_formatDistance(selectedDistance)} para la parada marcada.'
                   : 'Se habilita cuando falten 200 m o menos para tu punto de bajada.',
-              style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade700),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: Colors.grey.shade700,
+              ),
             ),
           ),
       ],
@@ -967,7 +1155,8 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
   }
 
   Widget _buildPassengerInfo(ThemeData theme) {
-    final conductor = _viaje?['conductor'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final conductor =
+        _viaje?['conductor'] as Map<String, dynamic>? ?? <String, dynamic>{};
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -975,7 +1164,11 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 16, offset: Offset(0, 8)),
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
         ],
       ),
       child: Column(
@@ -983,12 +1176,23 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
         children: [
           Text(
             'Información del conductor',
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 12),
-          _infoRow(Icons.person_outline, conductor['nombre']?.toString() ?? 'Sin nombre'),
-          _infoRow(Icons.directions_car_filled_outlined, conductor['vehiculo']?.toString() ?? 'Sin vehículo'),
-          _infoRow(Icons.pin_outlined, conductor['placas']?.toString() ?? 'Sin placas'),
+          _infoRow(
+            Icons.person_outline,
+            conductor['nombre']?.toString() ?? 'Sin nombre',
+          ),
+          _infoRow(
+            Icons.directions_car_filled_outlined,
+            conductor['vehiculo']?.toString() ?? 'Sin vehículo',
+          ),
+          _infoRow(
+            Icons.pin_outlined,
+            conductor['placas']?.toString() ?? 'Sin placas',
+          ),
         ],
       ),
     );
@@ -1001,7 +1205,8 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
       'Mantente a la derecha para seguir hacia el destino',
       'Reduce velocidad al aproximarte al punto de descenso',
     ];
-    final shownInstructions = _instructions.isEmpty ? fallbackInstructions : _instructions;
+    final shownInstructions =
+        _instructions.isEmpty ? fallbackInstructions : _instructions;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -1010,7 +1215,11 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 16, offset: Offset(0, 8)),
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
         ],
       ),
       child: Column(
@@ -1018,7 +1227,9 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
         children: [
           Text(
             'Indicaciones en tiempo real',
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           if (stop != null) ...[
             const SizedBox(height: 10),
@@ -1050,7 +1261,11 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
                 children: [
                   const Padding(
                     padding: EdgeInsets.only(top: 4),
-                    child: Icon(Icons.turn_slight_right, size: 18, color: Color(0xFF0B6E4F)),
+                    child: Icon(
+                      Icons.turn_slight_right,
+                      size: 18,
+                      color: Color(0xFF0B6E4F),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(child: Text(instruction)),
@@ -1064,9 +1279,10 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
   }
 
   Widget _buildPassengersCard(ThemeData theme) {
-    final passengers = (_viaje?['pasajeros'] as List<dynamic>? ?? <dynamic>[])
-        .whereType<Map<String, dynamic>>()
-        .toList();
+    final passengers =
+        (_viaje?['pasajeros'] as List<dynamic>? ?? <dynamic>[])
+            .whereType<Map<String, dynamic>>()
+            .toList();
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -1074,7 +1290,11 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 16, offset: Offset(0, 8)),
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
         ],
       ),
       child: Column(
@@ -1082,14 +1302,23 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
         children: [
           Text(
             'Pasajeros del viaje',
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 12),
           ...passengers.map((passenger) {
-            final state = passenger['estado']?.toString() ?? 'pendiente_abordar';
+            final state =
+                passenger['estado']?.toString() ?? 'pendiente_abordar';
             final chip = switch (state) {
-              'en_vehiculo' => _statusChip('En vehículo', Colors.green.shade700),
-              'bajo_del_vehiculo' => _statusChip('Ya bajó', Colors.blueGrey.shade600),
+              'en_vehiculo' => _statusChip(
+                'En vehículo',
+                Colors.green.shade700,
+              ),
+              'bajo_del_vehiculo' => _statusChip(
+                'Ya bajó',
+                Colors.blueGrey.shade600,
+              ),
               _ => _statusChip('Pendiente', Colors.orange.shade700),
             };
 
@@ -1107,18 +1336,24 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
                   Row(
                     children: [
                       CircleAvatar(
-                        backgroundImage: passenger['foto_perfil'] != null
-                            ? NetworkImage(passenger['foto_perfil'].toString())
-                            : null,
-                        child: passenger['foto_perfil'] == null
-                            ? const Icon(Icons.person_outline)
-                            : null,
+                        backgroundImage:
+                            passenger['foto_perfil'] != null
+                                ? NetworkImage(
+                                  passenger['foto_perfil'].toString(),
+                                )
+                                : null,
+                        child:
+                            passenger['foto_perfil'] == null
+                                ? const Icon(Icons.person_outline)
+                                : null,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           passenger['nombre']?.toString() ?? 'Pasajero',
-                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                       chip,
@@ -1128,7 +1363,9 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
                     const SizedBox(height: 10),
                     Text(
                       'Solicitó una parada intermedia.',
-                      style: theme.textTheme.bodyMedium?.copyWith(color: Colors.orange.shade900),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.orange.shade900,
+                      ),
                     ),
                   ],
                 ],
@@ -1196,9 +1433,18 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
           const SizedBox(height: 2),
-          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );

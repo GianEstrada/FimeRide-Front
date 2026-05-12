@@ -1,4 +1,4 @@
-import 'dart:convert';
+ reimport 'dart:convert';
 import 'dart:async';
 
 import 'package:http/http.dart' as http;
@@ -33,6 +33,7 @@ class ViajeAlertService {
   final Set<int> _viajes5MinNotificados = <int>{};
   final Set<int> _viajesHoraSalidaNotificados = <int>{};
   bool _popupConductorActivo = false;
+  bool _popupPasajeroActivo = false;
   bool _isPolling = false;
 
   int _asInt(dynamic value, {int fallback = 0}) {
@@ -147,7 +148,11 @@ class ViajeAlertService {
 
       if (mostrar5Min && !_viajes5MinNotificados.contains(viajeId)) {
         _viajes5MinNotificados.add(viajeId);
-        await onPasajeroPopup(viaje, esHoraSalida: false);
+        if (!_popupPasajeroActivo) {
+          _popupPasajeroActivo = true;
+          await onPasajeroPopup(viaje, esHoraSalida: false);
+          _popupPasajeroActivo = false;
+        }
         await LocalNotificationService.show(
           id: 2200 + viajeId,
           title: 'Tienes un viaje proximo',
@@ -158,7 +163,11 @@ class ViajeAlertService {
 
       if (mostrarHora && !_viajesHoraSalidaNotificados.contains(viajeId)) {
         _viajesHoraSalidaNotificados.add(viajeId);
-        await onPasajeroPopup(viaje, esHoraSalida: true);
+        if (!_popupPasajeroActivo) {
+          _popupPasajeroActivo = true;
+          await onPasajeroPopup(viaje, esHoraSalida: true);
+          _popupPasajeroActivo = false;
+        }
         await LocalNotificationService.show(
           id: 2300 + viajeId,
           title: 'Hora del viaje',
