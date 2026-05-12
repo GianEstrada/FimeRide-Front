@@ -31,10 +31,6 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
   static const Duration _monitorPollFast = Duration(seconds: 10);
   static const Duration _monitorPollSlow = Duration(minutes: 1);
 
-  // DEBUG_REMOVE_START: cambia a false o borra este bloque para quitar herramientas debug.
-  static const bool _debugToolsEnabled = true;
-  // DEBUG_REMOVE_END
-
   bool _isConductor = false;
   bool _isConductorEnabled = false;
   List<dynamic> _viajes = [];
@@ -283,17 +279,41 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
     _preinicioPasajeroMostrados.add(viajeId);
 
     if (!mounted) return;
-    await Navigator.push(
+    await showDialog(
       context,
-      MaterialPageRoute(
-        builder: (_) => PreinicioPasajeroScreen(
-          data: viaje,
-          onConfirmarAbordo: () async {
-            await _confirmarAbordo(viaje['asignacion_id']);
-            if (mounted) Navigator.of(context).pop();
-          },
-        ),
-      ),
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Preinicio del viaje'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Tu viaje: ${viaje['inicio']} -> ${viaje['destino']}'),
+              const SizedBox(height: 8),
+              Text('Hora salida: ${viaje['hora_salida']}'),
+              const SizedBox(height: 16),
+              const Text(
+                'Confirma cuando ya subiste al vehiculo.',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cerrar'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                await _confirmarAbordo(viaje['asignacion_id']);
+                if (mounted) Navigator.of(context).pop();
+              },
+              icon: const Icon(Icons.check_circle_outline),
+              label: const Text('Confirmar abordaje'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -358,238 +378,6 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
     );
     await _viajeAlertService?.forceRefresh();
   }
-
-  Future<void> _forzarViajeEnCursoTemporal(ViajeEnCursoRol rol, int rolId) async {
-    try {
-      final roleSegment = rol == ViajeEnCursoRol.conductor ? 'conductor' : 'pasajero';
-      final url = Uri.parse(
-        'https://fimeride.onrender.com/api/viajes/$roleSegment/$rolId/forzar_en_curso/',
-      );
-      await http.post(url, headers: {'Content-Type': 'application/json'});
-    } catch (_) {
-      // Si falla el forzado, la vista igual intentará abrir con el estado real.
-    }
-  }
-
-  // DEBUG_REMOVE_START
-  Future<void> _debugForzarConductorPopupYNotificacion() async {
-    final viaje = {
-      'id': -100,
-      'inicio': 'Monterrey Centro',
-      'destino': 'FIME',
-      'hora_salida': '08:00',
-    };
-
-    await LocalNotificationService.show(
-      id: 91001,
-      title: 'DEBUG Conductor',
-      body: 'Forzando notificacion de conductor',
-    );
-
-    await _mostrarPopupConductor(viaje);
-  }
-
-  Future<void> _debugForzarPasajeroPopupYNotificacion() async {
-    final viaje = {
-      'asignacion_id': -200,
-      'viaje_id': -201,
-      'inicio': 'Monterrey Centro',
-      'destino': 'FIME',
-      'hora_salida': '08:00',
-      'confirmado_por_conductor': true,
-    };
-
-    await LocalNotificationService.show(
-      id: 91002,
-      title: 'DEBUG Pasajero',
-      body: 'Forzando notificacion de pasajero',
-    );
-
-    await _mostrarPopupPasajero(viaje, esHoraSalida: false);
-  }
-
-  Future<void> _debugAbrirPreinicioConductor() async {
-    if (!mounted) return;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PreinicioConductorScreen(
-          data: {
-            'viaje_id': -300,
-            'inicio': 'Monterrey Centro',
-            'destino': 'FIME',
-            'hora_salida': '08:00',
-            'conductor_nombre': 'Debug Conductor',
-            'vehiculo': 'Toyota Corolla 2020',
-            'placas_vehiculo': 'DBG-1234',
-            'origen_lat': 25.6866,
-            'origen_lng': -100.3161,
-            'destino_lat': 25.7250,
-            'destino_lng': -100.3134,
-            'pasajeros': [
-              {'asignacion_id': -1, 'nombre': 'Pasajero A', 'abordo_confirmado': true},
-              {'asignacion_id': -2, 'nombre': 'Pasajero B', 'abordo_confirmado': false},
-            ],
-            'puede_iniciar': false,
-            'puede_esperar_5_mas': true,
-          },
-          onRefresh: () async {},
-        ),
-      ),
-    );
-  }
-
-  Future<void> _debugAbrirPreinicioPasajero() async {
-    if (!mounted) return;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PreinicioPasajeroScreen(
-          data: {
-            'asignacion_id': -400,
-            'viaje_id': -401,
-            'inicio': 'Monterrey Centro',
-            'destino': 'FIME',
-            'hora_salida': '08:00',
-          },
-          onConfirmarAbordo: () {
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('DEBUG: abordaje confirmado (simulado).')),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Future<void> _debugForzarVistaViajeEnCursoConductor() async {
-    final conductorIdDebug = _conductorId ?? 17;
-    if (_conductorId == null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('DEBUG: usando conductor_id placeholder (17).')),
-      );
-    }
-
-    await _forzarViajeEnCursoTemporal(ViajeEnCursoRol.conductor, conductorIdDebug);
-    if (!mounted || _viajeEnCursoVisible) return;
-    _viajeEnCursoVisible = true;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ViajeEnProcesoScreen(
-          rol: ViajeEnCursoRol.conductor,
-          rolId: conductorIdDebug,
-          debugMockIfNoTrip: true,
-          onViajeCerrado: () async {
-            await _viajeAlertService?.forceRefresh();
-          },
-        ),
-      ),
-    );
-    _viajeEnCursoVisible = false;
-  }
-
-  Future<void> _debugForzarVistaViajeEnCursoPasajero() async {
-    final pasajeroIdDebug = _pasajeroId ?? 18;
-    if (_pasajeroId == null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('DEBUG: usando pasajero_id placeholder (18).')),
-      );
-    }
-
-    await _forzarViajeEnCursoTemporal(ViajeEnCursoRol.pasajero, pasajeroIdDebug);
-    if (!mounted || _viajeEnCursoVisible) return;
-    _viajeEnCursoVisible = true;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ViajeEnProcesoScreen(
-          rol: ViajeEnCursoRol.pasajero,
-          rolId: pasajeroIdDebug,
-          debugMockIfNoTrip: true,
-          onViajeCerrado: () async {
-            await _viajeAlertService?.forceRefresh();
-          },
-        ),
-      ),
-    );
-    _viajeEnCursoVisible = false;
-  }
-
-  void _openDebugTripTools() {
-    if (!mounted) return;
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Debug Viajes (temporal)',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _debugForzarConductorPopupYNotificacion();
-                  },
-                  icon: const Icon(Icons.notifications_active),
-                  label: const Text('Conductor: notificacion + popup'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _debugForzarPasajeroPopupYNotificacion();
-                  },
-                  icon: const Icon(Icons.notifications_active_outlined),
-                  label: const Text('Pasajero: notificacion + popup'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _debugAbrirPreinicioConductor();
-                  },
-                  icon: const Icon(Icons.route),
-                  label: const Text('Abrir preinicio conductor'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _debugAbrirPreinicioPasajero();
-                  },
-                  icon: const Icon(Icons.directions_car),
-                  label: const Text('Abrir preinicio pasajero'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _debugForzarVistaViajeEnCursoConductor();
-                  },
-                  icon: const Icon(Icons.play_circle_outline),
-                  label: const Text('Forzar viaje en curso (Conductor)'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _debugForzarVistaViajeEnCursoPasajero();
-                  },
-                  icon: const Icon(Icons.play_circle_fill),
-                  label: const Text('Forzar viaje en curso (Pasajero)'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-  // DEBUG_REMOVE_END
 
   Future<void> _checkConductorStatus() async {
     final prefs = await SharedPreferences.getInstance();
@@ -687,14 +475,6 @@ Future<void> _fetchUsuarioInfo() async {
     );
 
     return Scaffold(
-  floatingActionButton: _debugToolsEnabled
-      ? FloatingActionButton.small(
-          heroTag: 'debug_tools_fab',
-          onPressed: _openDebugTripTools,
-          backgroundColor: const Color.fromARGB(255, 0, 87, 54),
-          child: const Icon(Icons.bug_report, color: Colors.white),
-        )
-      : null,
   drawer: Drawer(
   child: ListView(
     padding: EdgeInsets.zero,

@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:fimeride_front/formulario_pasajero.dart';
 import 'package:fimeride_front/fimehub_home.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FimeHubLogin extends StatefulWidget {
@@ -289,6 +291,11 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
           await prefs.setString('nombre', data['nombre']);
         }
 
+        final faceMatchOk = await _validarIdentidadViva(usuarioId);
+        if (!faceMatchOk) {
+          return;
+        }
+
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
@@ -304,6 +311,51 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
       }
     } catch (_) {
       _showDialog('Error de conexión', 'Verifica tu internet');
+    }
+  }
+
+  Future<bool> _validarIdentidadViva(int usuarioId) async {
+    final picker = ImagePicker();
+    final XFile? capture = await picker.pickImage(
+      source: ImageSource.camera,
+      preferredCameraDevice: CameraDevice.front,
+      imageQuality: 90,
+    );
+
+    if (capture == null) {
+      _showDialog('Validación cancelada', 'Debes completar la validación de identidad para entrar.');
+      return false;
+    }
+
+    final url = Uri.parse('https://fimeride.onrender.com/api/login_face_match/');
+    final request = http.MultipartRequest('POST', url)
+      ..fields['usuario_id'] = usuarioId.toString()
+      ..files.add(await http.MultipartFile.fromPath('imagen_viva', File(capture.path).path));
+
+    try {
+      final response = await request.send();
+      final body = await response.stream.bytesToString();
+
+      if (response.statusCode == 200) {
+        return true;
+      }
+
+      String mensaje = 'No se pudo confirmar tu identidad.';
+      if (body.isNotEmpty) {
+        try {
+          final parsed = jsonDecode(body);
+          if (parsed is Map<String, dynamic>) {
+            mensaje = parsed['error']?.toString() ?? parsed['message']?.toString() ?? mensaje;
+          }
+        } catch (_) {
+          mensaje = body;
+        }
+      }
+      _showDialog('Validación de identidad', mensaje);
+      return false;
+    } catch (_) {
+      _showDialog('Error de conexión', 'No se pudo validar identidad en vivo.');
+      return false;
     }
   }
 

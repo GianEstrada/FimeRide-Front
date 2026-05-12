@@ -3,6 +3,7 @@ import 'package:fimeride_front/fimehub_login.dart';
 import 'package:fimeride_front/pagina_principal.dart';
 import 'package:fimeride_front/api_service.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FimeHubHome extends StatefulWidget {
@@ -28,19 +29,28 @@ class _FimeHubHomeState extends State<FimeHubHome> {
     _SlideData(
       title: 'Bienvenido a FimeHub',
       subtitle: 'Tu plataforma de aplicaciones FIME',
-      gradientColors: [Color.fromARGB(255, 0, 162, 100), Color.fromARGB(255, 0, 87, 54)],
+      gradientColors: [
+        Color.fromARGB(255, 0, 162, 100),
+        Color.fromARGB(255, 0, 87, 54),
+      ],
       icon: Icons.hub,
     ),
     _SlideData(
       title: 'Noticias FIME',
       subtitle: 'Próximamente: información reciente de la facultad',
-      gradientColors: [Color.fromARGB(255, 0, 130, 180), Color.fromARGB(255, 0, 65, 100)],
+      gradientColors: [
+        Color.fromARGB(255, 0, 130, 180),
+        Color.fromARGB(255, 0, 65, 100),
+      ],
       icon: Icons.newspaper,
     ),
     _SlideData(
       title: 'Servicios Universitarios',
       subtitle: 'Todo en un solo lugar',
-      gradientColors: [Color.fromARGB(255, 80, 0, 160), Color.fromARGB(255, 40, 0, 90)],
+      gradientColors: [
+        Color.fromARGB(255, 80, 0, 160),
+        Color.fromARGB(255, 40, 0, 90),
+      ],
       icon: Icons.school,
     ),
   ];
@@ -84,16 +94,28 @@ class _FimeHubHomeState extends State<FimeHubHome> {
   /// FimeRide (animación de 350 ms) y luego navega a PaginaPrincipal.
   Future<void> _openFimeRide() async {
     setState(() => _launchingApp = true);
-      // Inicializa el token de Mapbox necesario para las pantallas de mapa.
-      mapboxAccessToken ??= await fetchMapboxToken();
-      await Future.delayed(const Duration(milliseconds: 350));
+    // Inicializa el token de Mapbox necesario para las pantallas de mapa.
+    mapboxAccessToken ??= await fetchMapboxToken();
+    await Future.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
+
+    await _showFaceMatchDialog();
+    if (!mounted) return;
+
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const PaginaPrincipal()),
     );
     // Al volver de FimeRide, restauramos el estado del hub
     if (mounted) setState(() => _launchingApp = false);
+  }
+
+  Future<void> _showFaceMatchDialog() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => const _FaceMatchPreviewDialog(),
+    );
   }
 
   void _cerrarSesion() async {
@@ -214,9 +236,10 @@ class _FimeHubHomeState extends State<FimeHubHome> {
                         width: i == _carouselPage ? 22 : 8,
                         height: 8,
                         decoration: BoxDecoration(
-                          color: i == _carouselPage
-                              ? Colors.white
-                              : Colors.white54,
+                          color:
+                              i == _carouselPage
+                                  ? Colors.white
+                                  : Colors.white54,
                           borderRadius: BorderRadius.circular(4),
                         ),
                       );
@@ -254,19 +277,23 @@ class _FimeHubHomeState extends State<FimeHubHome> {
                 duration: const Duration(milliseconds: 380),
                 switchInCurve: Curves.easeOut,
                 switchOutCurve: Curves.easeIn,
-                transitionBuilder: (child, animation) => FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 0.15),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
-                  ),
-                ),
-                child: _launchingApp
-                    ? _buildNavPreview(sw) // 👉 fondo transformado en menú de FimeRide
-                    : _buildAppGrid(sw),   // 👉 grid de apps del hub
+                transitionBuilder:
+                    (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, 0.15),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    ),
+                child:
+                    _launchingApp
+                        ? _buildNavPreview(
+                          sw,
+                        ) // 👉 fondo transformado en menú de FimeRide
+                        : _buildAppGrid(sw), // 👉 grid de apps del hub
               ),
             ),
           ),
@@ -400,10 +427,7 @@ class _FimeHubHomeState extends State<FimeHubHome> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  const Color.fromARGB(255, 0, 162, 100),
-                  accentColor,
-                ],
+                colors: [const Color.fromARGB(255, 0, 162, 100), accentColor],
               ),
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
@@ -497,23 +521,24 @@ class _FimeHubHomeState extends State<FimeHubHome> {
           // Iconos del menú inferior de FimeRide
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: navItems.map((item) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(item.icon, color: navColor, size: sw * 0.07),
-                  const SizedBox(height: 4),
-                  Text(
-                    item.label,
-                    style: TextStyle(
-                      fontFamily: 'ADLaMDisplay',
-                      color: navColor.withOpacity(0.8),
-                      fontSize: sw * 0.025,
-                    ),
-                  ),
-                ],
-              );
-            }).toList(),
+            children:
+                navItems.map((item) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(item.icon, color: navColor, size: sw * 0.07),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.label,
+                        style: TextStyle(
+                          fontFamily: 'ADLaMDisplay',
+                          color: navColor.withOpacity(0.8),
+                          fontSize: sw * 0.025,
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
           ),
         ],
       ),
@@ -540,4 +565,219 @@ class _NavItem {
   final IconData icon;
   final String label;
   const _NavItem(this.icon, this.label);
+}
+
+class _FaceMatchPreviewDialog extends StatelessWidget {
+  const _FaceMatchPreviewDialog();
+
+  Future<void> _openCamera(BuildContext context) async {
+    try {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(source: ImageSource.camera);
+      if (image == null || !context.mounted) return;
+
+      final accepted = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const _ComparandoDialog(),
+      );
+
+      if (accepted == true && context.mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir la camara')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final dialogWidth = size.width > 480 ? 420.0 : size.width * 0.92;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Container(
+        width: dialogWidth,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFEBFFF5), Color(0xFFFFFFFF)],
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Icon(
+              Icons.verified_user_rounded,
+              size: 54,
+              color: Color(0xFF007A4C),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Verificacion facial',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'ADLaMDisplay',
+                fontSize: 24,
+                color: Color(0xFF005736),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Diseno Frontend (sin comparacion con backend por ahora)',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Color(0xFF4A6A5C)),
+            ),
+            const SizedBox(height: 18),
+            _buildStep(
+              icon: Icons.badge_outlined,
+              title: '1. Sube tu identificacion',
+              subtitle: 'Foto del INE/credencial con buena iluminacion.',
+            ),
+            const SizedBox(height: 12),
+            _buildStep(
+              icon: Icons.face_retouching_natural,
+              title: '2. Toma tu selfie',
+              subtitle:
+                  'Mira de frente y evita accesorios que cubran tu rostro.',
+            ),
+            const SizedBox(height: 12),
+            _buildStep(
+              icon: Icons.analytics_outlined,
+              title: '3. Face Match',
+              subtitle:
+                  'Aqui se mostrara el porcentaje de similitud (proximamente).',
+            ),
+            const SizedBox(height: 18),
+            OutlinedButton.icon(
+              onPressed: () => _openCamera(context),
+              icon: const Icon(Icons.photo_camera_front_outlined),
+              label: const Text('Abrir camara (UI)'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF005736),
+                side: const BorderSide(color: Color(0xFF005736)),
+                minimumSize: const Size.fromHeight(46),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStep({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0xFFD9F6E8),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: const Color(0xFF007A4C), size: 20),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1F3C30),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(color: Color(0xFF4E675C), fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ComparandoDialog extends StatefulWidget {
+  const _ComparandoDialog();
+
+  @override
+  State<_ComparandoDialog> createState() => _ComparandoDialogState();
+}
+
+class _ComparandoDialogState extends State<_ComparandoDialog> {
+  bool _aceptado = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _runFlow();
+  }
+
+  Future<void> _runFlow() async {
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+    setState(() => _aceptado = true);
+
+    await Future.delayed(const Duration(milliseconds: 1200));
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: _aceptado
+                  ? const Icon(
+                      Icons.check_circle_rounded,
+                      key: ValueKey('accepted'),
+                      size: 58,
+                      color: Color(0xFF0B8A54),
+                    )
+                  : const SizedBox(
+                      key: ValueKey('loading'),
+                      width: 46,
+                      height: 46,
+                      child: CircularProgressIndicator(strokeWidth: 4),
+                    ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _aceptado ? 'Aceptado' : 'Comparando...',
+              style: const TextStyle(
+                fontFamily: 'ADLaMDisplay',
+                fontSize: 22,
+                color: Color(0xFF005736),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
