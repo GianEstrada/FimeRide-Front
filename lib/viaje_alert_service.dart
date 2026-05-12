@@ -1,14 +1,21 @@
- reimport 'dart:convert';
+import 'dart:convert';
 import 'dart:async';
 
 import 'package:http/http.dart' as http;
 
 import 'local_notification_service.dart';
 
-typedef ConductorPopupCallback = Future<void> Function(Map<String, dynamic> viajeData);
-typedef ConductorPreinicioCallback = Future<void> Function(Map<String, dynamic> preinicioData);
-typedef PasajeroPopupCallback = Future<void> Function(Map<String, dynamic> viajeData, {required bool esHoraSalida});
-typedef PasajeroConfirmadoCallback = Future<void> Function(Map<String, dynamic> viajeData);
+typedef ConductorPopupCallback =
+    Future<void> Function(Map<String, dynamic> viajeData);
+typedef ConductorPreinicioCallback =
+    Future<void> Function(Map<String, dynamic> preinicioData);
+typedef PasajeroPopupCallback =
+    Future<void> Function(
+      Map<String, dynamic> viajeData, {
+      required bool esHoraSalida,
+    });
+typedef PasajeroConfirmadoCallback =
+    Future<void> Function(Map<String, dynamic> viajeData);
 
 class ViajeAlertService {
   ViajeAlertService({
@@ -81,7 +88,9 @@ class ViajeAlertService {
   }
 
   Future<void> _pollConductor() async {
-    final url = Uri.parse('https://fimeride.onrender.com/api/recordatorios/conductor/$conductorId/');
+    final url = Uri.parse(
+      'https://fimeride.onrender.com/api/recordatorios/conductor/$conductorId/',
+    );
     final response = await http.get(url).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) return;
 
@@ -101,7 +110,8 @@ class ViajeAlertService {
 
     final ahora = DateTime.now();
     if (showNotification && viaje != null) {
-      final hanPasado3Min = _ultimaNotifConductor == null ||
+      final hanPasado3Min =
+          _ultimaNotifConductor == null ||
           ahora.difference(_ultimaNotifConductor!).inMinutes >= 3;
       if (hanPasado3Min) {
         _ultimaNotifConductor = ahora;
@@ -119,7 +129,9 @@ class ViajeAlertService {
   }
 
   Future<void> _pollPasajero() async {
-    final url = Uri.parse('https://fimeride.onrender.com/api/recordatorios/pasajero/$pasajeroId/');
+    final url = Uri.parse(
+      'https://fimeride.onrender.com/api/recordatorios/pasajero/$pasajeroId/',
+    );
     final response = await http.get(url).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) return;
 

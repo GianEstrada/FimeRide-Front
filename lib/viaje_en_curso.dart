@@ -364,9 +364,12 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
   Future<_RouteSnapshot> _buildRouteSnapshot(Map<String, dynamic> viaje) async {
     final conductorConfirmado = viaje['confirmado_por_conductor'] == true;
     final current =
-      widget.rol == ViajeEnCursoRol.pasajero
-        ? (conductorConfirmado ? _readPoint(viaje['conductor_posicion']) : null)
-        : (_readPoint(viaje['conductor_posicion']) ?? _readPoint(viaje['origen']));
+        widget.rol == ViajeEnCursoRol.pasajero
+            ? (conductorConfirmado
+                ? _readPoint(viaje['conductor_posicion'])
+                : null)
+            : (_readPoint(viaje['conductor_posicion']) ??
+                _readPoint(viaje['origen']));
     final userCurrent = _readPoint(viaje['usuario_posicion']);
     final destination =
         widget.rol == ViajeEnCursoRol.conductor
@@ -730,7 +733,7 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
             TextButton(
               onPressed: () async {
                 await enviarReporte();
-                fipara los ri = Uri.parse('tel:$telefonoSoporte');
+                final uri = Uri.parse('tel:$telefonoSoporte');
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
                 if (!context.mounted) return;
                 Navigator.of(context).pop();
@@ -890,9 +893,12 @@ class _ViajeEnProcesoScreenState extends State<ViajeEnProcesoScreen> {
   Widget _buildMapCard(ThemeData theme, bool isConductor) {
     final conductorConfirmado = _viaje?['confirmado_por_conductor'] == true;
     final current =
-      isConductor
-        ? (_readPoint(_viaje?['conductor_posicion']) ?? _readPoint(_viaje?['origen']))
-        : (conductorConfirmado ? _readPoint(_viaje?['conductor_posicion']) : null);
+        isConductor
+            ? (_readPoint(_viaje?['conductor_posicion']) ??
+                _readPoint(_viaje?['origen']))
+            : (conductorConfirmado
+                ? _readPoint(_viaje?['conductor_posicion'])
+                : null);
     final userCurrent = _readPoint(_viaje?['usuario_posicion']);
     final destination =
         isConductor
