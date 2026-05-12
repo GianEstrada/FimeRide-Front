@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:fimeride_front/terminos_condiciones.dart';
 import 'package:flutter/material.dart';
@@ -515,12 +516,19 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
 
   try {
     final response = await request.send();
+    final responseBody = await response.stream.bytesToString();
 
     if (response.statusCode == 201) {
-      await response.stream.bytesToString();
+      String mensaje = "Registro exitoso";
+      try {
+        final data = jsonDecode(responseBody);
+        if (data is Map<String, dynamic> && data['message'] is String) {
+          mensaje = data['message'];
+        }
+      } catch (_) {}
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Registro exitoso")),
+        SnackBar(content: Text(mensaje)),
       );
 
       Navigator.push(
@@ -528,7 +536,6 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
         MaterialPageRoute(builder: (context) => const FimeHubLogin()),
       );
     } else {
-      final responseBody = await response.stream.bytesToString();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error al registrar: $responseBody")),
       );
