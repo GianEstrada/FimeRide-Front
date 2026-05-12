@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:camera/camera.dart';
 import 'package:fimeride_front/configuracion_screen.dart';
 import 'package:fimeride_front/fimehub_home.dart';
 import 'package:fimeride_front/fimehub_login.dart';
@@ -46,6 +48,8 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
   DateTime? _bloquearAutoAperturaHasta;
   int? _conductorId;
   int? _pasajeroId;
+  int? _usuarioId;
+  bool _faceMatchCompletado = false;
   final Set<int> _preinicioPasajeroMostrados = <int>{};
 
   @override
@@ -57,6 +61,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
     _fetchUsuarioInfo();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _realizarFaceMatch();
       _initAlertasViaje();
     });
   }
@@ -448,12 +453,29 @@ Future<void> _fetchAsignaciones() async {
 Future<void> _fetchUsuarioInfo() async {
   final prefs = await SharedPreferences.getInstance();
   final nombre = prefs.getString('nombre');
+  final usuarioId = prefs.getInt('usuario_id');
   print("Nombre recuperado de SharedPreferences: $nombre");
 
   setState(() {
     _fotoPerfil = prefs.getString('foto_perfil') ?? 'assets/default_avatar.png';
     _nombreUsuario = nombre?.split(' ')[0] ?? 'Usuario'; // Solo el primer nombre
+    _usuarioId = usuarioId;
   });
+}
+
+Future<void> _realizarFaceMatch() async {
+  if (_faceMatchCompletado || _usuarioId == null) {
+    return;
+  }
+
+  _faceMatchCompletado = true;
+
+  if (!mounted) return;
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => _FaceMatchCameraDialog(usuarioId: _usuarioId!),
+  );
 }
 
   @override
@@ -1144,4 +1166,325 @@ void _showSuccessDialog(BuildContext context) {
     },
   );
 }
+}
+
+class _FaceMatchCameraDialog extends StatefulWidget {
+  final int usuarioId;
+  _FaceMatchCameraDialog({required this.usuarioId});
+  @override
+  State<_FaceMatchCameraDialog> createState() => _FaceMatchCameraDialogState();
+}
+
+class _FaceMatchCameraDialogState extends State<_FaceMatchCameraDialog> {
+  late CameraController _cameraController;
+  bool _cameraInitialized = false;
+  bool _isCapturing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeCamera();
+  }
+
+  Future<void> _initializeCamera() async {
+    try {
+      final cameras = await availableCameras();
+      final frontCamera = cameras.firstWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+
+      _cameraController = CameraController(
+        frontCamera,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+
+      await _cameraController.initialize();
+      if (mounted) {
+        setState(() {
+          _cameraInitialized = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al inicializar cámara: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _captureFoto() async {
+    if (_isCapturing || !_cameraInitialized) return;
+
+    setState(() => _isCapturing = true);
+
+    try {
+      final XFile picture = await _cameraController.takePicture();
+
+      if (!mounted) return;
+
+      // Mostrar progreso
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const _FaceMatchProgressDialog(),
+      );
+
+      // Enviar al backend
+      final url = Uri.parse('https://fimeride.onrender.com/api/login_face_match/');
+      final request = http.MultipartRequest('POST', url)
+        ..fields['usuario_id'] = widget.usuarioId.toString()
+        ..files.add(await http.MultipartFile.fromPath('imagen_viva', picture.path));
+
+      final stopwatch = Stopwatch()..start();
+      final response = await request.send();
+      final body = await response.stream.bytesToString();
+      final elapsedMs = stopwatch.elapsedMilliseconds;
+
+      // Mostrar un mínimo de tiempo visual
+      const minVisualMs = 2600;
+      if (elapsedMs < minVisualMs) {
+        await Future.delayed(Duration(milliseconds: minVisualMs - elapsedMs));
+      }
+
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop(); // Cierra el progreso
+      }
+
+      if (response.statusCode == 200) {
+        double similarity = 100.0;
+        if (body.isNotEmpty) {
+          try {
+            final parsed = jsonDecode(body);
+            if (parsed is Map<String, dynamic>) {
+              final raw = parsed['similarity'];
+              if (raw is num) similarity = raw.toDouble();
+            }
+          } catch (_) {}
+        }
+        if (mounted) {
+          _showResultDialog(
+            'Face Match Completado',
+            'Tu identidad fue validada correctamente.\nSimilitud: ${similarity.toStringAsFixed(1)}%',
+            true,
+          );
+        }
+      } else {
+        String mensaje = 'No se pudo validar tu identidad.';
+        if (body.isNotEmpty) {
+          try {
+            final parsed = jsonDecode(body);
+            if (parsed is Map<String, dynamic>) {
+              mensaje = parsed['error']?.toString() ??
+                  parsed['message']?.toString() ??
+                  mensaje;
+            }
+          } catch (_) {}
+        }
+        if (mounted) {
+          _showResultDialog('Validación Fallida', mensaje, false);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _showResultDialog('Error', 'No se pudo capturar la foto: $e', false);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCapturing = false);
+      }
+    }
+  }
+
+  void _showResultDialog(String title, String message, bool success) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Cierra resultado
+              Navigator.of(context).pop(); // Cierra cámara
+            },
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCancelConfirmation() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Cancelar Face Match'),
+        content: const Text(
+          '¿Deseas cancelar la validación de identidad? Podrás intentarlo más tarde.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('No, continuar'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Cierra confirmación
+              Navigator.of(context).pop(); // Cierra cámara
+            },
+            child: const Text('Cancelar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _cameraController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_cameraInitialized) {
+      return AlertDialog(
+        title: const Text('Inicializando Cámara'),
+        content: const SizedBox(
+          height: 50,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
+    return WillPopScope(
+      onWillPop: () async {
+        if (!_isCapturing) {
+          _showCancelConfirmation();
+        }
+        return false;
+      },
+      child: AlertDialog(
+        title: const Text('Validación de Identidad'),
+        content: SizedBox(
+          width: 300,
+          height: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Por favor, enfoca tu rostro en la cámara y presiona Capturar',
+                style: TextStyle(fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: 250,
+                height: 250,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: CameraPreview(_cameraController),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isCapturing ? null : _captureFoto,
+                  icon: const Icon(Icons.camera_alt),
+                  label: const Text('Capturar Foto'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color.fromARGB(255, 0, 87, 54),
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _isCapturing ? null : () => _showCancelConfirmation(),
+            child: const Text('Cancelar'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FaceMatchProgressDialog extends StatefulWidget {
+  const _FaceMatchProgressDialog();
+
+  @override
+  State<_FaceMatchProgressDialog> createState() =>
+      _FaceMatchProgressDialogState();
+}
+
+class _FaceMatchProgressDialogState extends State<_FaceMatchProgressDialog> {
+  static const _steps = <String>[
+    'Iniciando motor biometrico...',
+    'Detectando puntos faciales...',
+    'Extrayendo firma del rostro...',
+    'Comparando contra perfil aprobado...',
+    'Validando umbral de coincidencia...',
+  ];
+
+  Timer? _timer;
+  int _step = 0;
+  double _progress = 0.08;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 420), (_) {
+      if (!mounted) return;
+      setState(() {
+        _step = (_step + 1) % _steps.length;
+        if (_progress < 0.92) {
+          _progress += 0.08;
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+      onWillPop: () async => false,
+      child: AlertDialog(
+        title: const Text('Face Match en proceso'),
+        content: SizedBox(
+          width: 320,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.face_retouching_natural,
+                  size: 56, color: Color.fromARGB(255, 0, 87, 54)),
+              const SizedBox(height: 12),
+              Text(
+                _steps[_step],
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 14),
+              LinearProgressIndicator(value: _progress),
+              const SizedBox(height: 8),
+              Text('${(_progress * 100).toStringAsFixed(0)}%'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
