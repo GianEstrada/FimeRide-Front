@@ -101,15 +101,16 @@ class ViajeAlertService {
     final showNotification = data['show_notification'] == true;
     final viaje = data['viaje'] as Map<String, dynamic>?;
     final preinicio = data['preinicio'] as Map<String, dynamic>?;
+    final confirmado = viaje?['confirmado_por_conductor'] == true;
 
-    if (showPopup && viaje != null && !_popupConductorActivo) {
+    if (showPopup && !confirmado && viaje != null && !_popupConductorActivo) {
       _popupConductorActivo = true;
       await onConductorPopup(viaje);
       _popupConductorActivo = false;
     }
 
     final ahora = DateTime.now();
-    if (showNotification && viaje != null) {
+    if (showNotification && !confirmado && viaje != null) {
       final hanPasado3Min =
           _ultimaNotifConductor == null ||
           ahora.difference(_ultimaNotifConductor!).inMinutes >= 3;
