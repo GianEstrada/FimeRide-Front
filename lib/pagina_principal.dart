@@ -10,7 +10,6 @@ import 'package:fimeride_front/info_viajes.dart';
 import 'package:fimeride_front/lista_mensajes_screen.dart';
 import 'package:fimeride_front/pantalla_favoritos.dart';
 import 'package:fimeride_front/chat_screen.dart';
-import 'package:fimeride_front/local_notification_service.dart';
 import 'package:fimeride_front/preinicio_viaje_screen.dart';
 import 'package:fimeride_front/viaje_en_curso.dart';
 import 'package:fimeride_front/viaje_alert_service.dart';
@@ -230,14 +229,14 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
             TextButton(
               onPressed: () async {
                 await _accionConductorViaje(viaje['id'], 'cancelar');
-                if (mounted) Navigator.of(context).pop();
+                if (context.mounted) Navigator.of(context).pop();
               },
               child: const Text('Cancelar'),
             ),
             ElevatedButton(
               onPressed: () async {
                 await _accionConductorViaje(viaje['id'], 'confirmar');
-                if (mounted) Navigator.of(context).pop();
+                if (context.mounted) Navigator.of(context).pop();
               },
               child: const Text('Confirmar'),
             ),
@@ -280,7 +279,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
 
     if (!mounted) return;
     await showDialog(
-      context,
+      context: context,
       barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
@@ -306,7 +305,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with WidgetsBindingOb
             ElevatedButton.icon(
               onPressed: () async {
                 await _confirmarAbordo(viaje['asignacion_id']);
-                if (mounted) Navigator.of(context).pop();
+                if (context.mounted) Navigator.of(context).pop();
               },
               icon: const Icon(Icons.check_circle_outline),
               label: const Text('Confirmar abordaje'),
@@ -839,6 +838,7 @@ Future<void> _fetchUsuarioInfo() async {
                                     ElevatedButton(
                                   onPressed: () async{
                                     final prefs = await SharedPreferences.getInstance();
+                                    if (!context.mounted) return;
                                     final pasajeroId = prefs.getInt('pasajero_id');
                                     final viajeId = viaje['id'];
 
@@ -858,6 +858,7 @@ Future<void> _fetchUsuarioInfo() async {
                                         'viaje_id': viajeId,
                                       }),
                                     );
+                                    if (!context.mounted) return;
 
                                     if (response.statusCode == 201) {
                                       _showSuccessDialog(context);
@@ -966,6 +967,7 @@ Future<void> _fetchUsuarioInfo() async {
                     icon: const Icon(Icons.add, color: Color.fromARGB(255, 0, 87, 54)),
                     onPressed: () async {
                       final prefs = await SharedPreferences.getInstance();
+                      if (!context.mounted) return;
                       final conductorId = prefs.getInt('conductor_id');
 
                       if (conductorId == null) {
@@ -976,6 +978,7 @@ Future<void> _fetchUsuarioInfo() async {
 
                       final url = Uri.parse("https://fimeride.onrender.com/api/conductor_estado/$conductorId/");
                       final response = await http.get(url);
+                      if (!context.mounted) return;
 
                       if (response.statusCode == 200) {
                         final responseData = jsonDecode(response.body);
@@ -1042,6 +1045,7 @@ Future<void> _fetchUsuarioInfo() async {
           TextButton(
             onPressed: () async {
               final prefs = await SharedPreferences.getInstance();
+              if (!context.mounted) return;
               final usuarioId = prefs.getInt('usuario_id');
               Navigator.of(context).pop();
               if (usuarioId == null) {
@@ -1093,6 +1097,7 @@ void _showAyudaDialog(BuildContext context) {
 void _cerrarSesion(BuildContext context) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.clear(); // Elimina todos los datos almacenados
+  if (!context.mounted) return;
   Navigator.pushAndRemoveUntil(
     context,
     MaterialPageRoute(builder: (context) => const FimeHubLogin()),

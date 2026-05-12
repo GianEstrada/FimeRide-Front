@@ -19,7 +19,8 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
   bool _obscurePassword = true;
   File? _profileImage;
   File? _frontCredentialImage;
-  File? _backCredentialImage;
+  File? _credentialDigitalPdf;
+  String _credentialDigitalPdfFileName = "Seleccionar credencial digital (PDF)";
   File? _boletaRectoria;
   String _boletaFileName = "Seleccionar boleta de rectoría";
   bool _aceptaTerminos = false;
@@ -38,8 +39,7 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
         _nombreCompletoController.text.trim().isNotEmpty &&
         _correoController.text.trim().isNotEmpty &&
         _profileImage != null &&
-        _frontCredentialImage != null &&
-        _backCredentialImage != null &&
+          (_frontCredentialImage != null || _credentialDigitalPdf != null) &&
         _boletaRectoria != null &&
         _aceptaTerminos;
   }
@@ -83,6 +83,32 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
         );
       },
     );
+  }
+
+  Future<void> _selectCredentialDigitalPdf() async {
+    try {
+      final XTypeGroup typeGroup = XTypeGroup(
+        label: 'PDF',
+        extensions: ['pdf'],
+      );
+
+      final XFile? file = await openFile(acceptedTypeGroups: [typeGroup]);
+
+      if (file != null) {
+        setState(() {
+          _credentialDigitalPdf = File(file.path);
+          _credentialDigitalPdfFileName = file.name;
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("No se seleccionó ningún archivo")),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al seleccionar el archivo: $e")),
+      );
+    }
   }
 
   Future<void> _selectPdf() async {
@@ -185,6 +211,11 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                         ),
                       ),
                       SizedBox(height: 10),
+                      Text(
+                        "Sube foto frontal o credencial digital (PDF)",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -195,12 +226,7 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                             });
                           }),
                           SizedBox(width: 10),
-                          _buildImagePicker("Foto trasera\n de la credencial", _backCredentialImage,
-                              (image) {
-                            setState(() {
-                              _backCredentialImage = image;
-                            });
-                          }),
+                          _buildPdfPicker(_credentialDigitalPdfFileName, _credentialDigitalPdf, _selectCredentialDigitalPdf),
                         ],
                       ),
                       SizedBox(height: 15),
@@ -480,8 +506,8 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
   if (_frontCredentialImage != null) {
     request.files.add(await http.MultipartFile.fromPath('credencial_frontal', _frontCredentialImage!.path));
   }
-  if (_backCredentialImage != null) {
-    request.files.add(await http.MultipartFile.fromPath('credencial_trasera', _backCredentialImage!.path));
+  if (_credentialDigitalPdf != null) {
+    request.files.add(await http.MultipartFile.fromPath('credencial_digital_pdf', _credentialDigitalPdf!.path));
   }
   if (_boletaRectoria != null) {
     request.files.add(await http.MultipartFile.fromPath('boleta_rectoria', _boletaRectoria!.path));
