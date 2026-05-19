@@ -819,7 +819,40 @@ class _PaginaPrincipalState extends State<PaginaPrincipal>
                                             print(
                                               "Asignación aceptada exitosamente",
                                             );
-                                            _fetchAsignaciones();
+                                            if (mounted) {
+                                              setState(() {
+                                                _asignaciones.removeWhere(
+                                                  (item) =>
+                                                      item['id'] ==
+                                                      asignacion['id'],
+                                                );
+                                              });
+                                            }
+                                            if (!mounted) return;
+                                            await showDialog(
+                                              context: context,
+                                              builder:
+                                                  (context) => AlertDialog(
+                                                    title: const Text(
+                                                      'Solicitud aceptada',
+                                                    ),
+                                                    content: const Text(
+                                                      'Pasajero añadido al viaje',
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed:
+                                                            () =>
+                                                                Navigator.of(
+                                                                  context,
+                                                                ).pop(),
+                                                        child: const Text(
+                                                          'Aceptar',
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                            );
                                           } else {
                                             print(
                                               "Error al aceptar la asignación: ${response.statusCode}",
