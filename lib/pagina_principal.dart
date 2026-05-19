@@ -438,6 +438,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal>
     final conductorId = prefs.getInt(
       'conductor_id',
     ); // Obtener el ID del conductor logueado
+    final pasajeroId = prefs.getInt('pasajero_id');
 
     if (conductorId == null) {
       print("Error: conductor_id no encontrado");
@@ -445,7 +446,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal>
     }
 
     final url = Uri.parse(
-      "https://fimeride.onrender.com/api/viajes/?conductor_id=$conductorId",
+      "https://fimeride.onrender.com/api/viajes/?conductor_id=$conductorId&pasajero_id=${pasajeroId ?? ''}",
     );
     final response = await http.get(url);
 
@@ -1036,6 +1037,11 @@ class _PaginaPrincipalState extends State<PaginaPrincipal>
                                           if (!context.mounted) return;
 
                                           if (response.statusCode == 201) {
+                                            setState(() {
+                                              _viajes.removeWhere(
+                                                (v) => v['id'] == viajeId,
+                                              );
+                                            });
                                             _showSuccessDialog(context);
                                           } else if (response.statusCode ==
                                               400) {
