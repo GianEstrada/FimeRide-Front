@@ -22,17 +22,18 @@ class ViajesRecientes extends StatefulWidget {
 class _ViajesRecientesState extends State<ViajesRecientes> {
   String _fotoPerfil = 'assets/image/icono-perfil';
   String _nombreUsuario = 'Usuario';
+  int? _usuarioId;
   bool _isConductor = false;
   bool _isConductorEnabled = false;
-  final List<bool> _isFavorite = List.generate(10, (index) => false);
+  Set<int> _favoriteConductorIds = <int>{};
   List<dynamic> _viajesPasajero = [];
   List<dynamic> _viajesConductor = [];
-  
+
   @override
   void initState() {
     super.initState();
     _checkConductorStatus();
-    _fetchViajesPasajero(); 
+    _fetchViajesPasajero();
     _fetchViajesConductor();
     _fetchUsuarioInfo();
   }
@@ -40,12 +41,63 @@ class _ViajesRecientesState extends State<ViajesRecientes> {
   Future<void> _fetchUsuarioInfo() async {
     final prefs = await SharedPreferences.getInstance();
     final nombre = prefs.getString('nombre');
+    final usuarioId = prefs.getInt('usuario_id');
     print("Nombre recuperado de SharedPreferences: $nombre");
 
     setState(() {
-      _fotoPerfil = prefs.getString('foto_perfil') ?? 'assets/default_avatar.png';
-      _nombreUsuario = nombre?.split(' ')[0] ?? 'Usuario'; // Solo el primer nombre
+      _fotoPerfil =
+          prefs.getString('foto_perfil') ?? 'assets/default_avatar.png';
+      _nombreUsuario =
+          nombre?.split(' ')[0] ?? 'Usuario'; // Solo el primer nombre
+      _usuarioId = usuarioId;
     });
+
+    await _loadFavoriteConductores();
+  }
+
+  String _favoritesKey() => 'fav_conductores_${_usuarioId ?? 0}';
+
+  Future<void> _loadFavoriteConductores() async {
+    if (_usuarioId == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList(_favoritesKey()) ?? <String>[];
+    final ids = raw.map((item) => int.tryParse(item)).whereType<int>().toSet();
+    if (!mounted) return;
+    setState(() {
+      _favoriteConductorIds = ids;
+    });
+  }
+
+  Future<void> _toggleFavoriteConductor(int conductorUsuarioId) async {
+    if (_usuarioId == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final nuevos = Set<int>.from(_favoriteConductorIds);
+    final wasFavorite = nuevos.contains(conductorUsuarioId);
+    if (wasFavorite) {
+      nuevos.remove(conductorUsuarioId);
+    } else {
+      nuevos.add(conductorUsuarioId);
+    }
+
+    await prefs.setStringList(
+      _favoritesKey(),
+      nuevos.map((id) => id.toString()).toList(),
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _favoriteConductorIds = nuevos;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          wasFavorite
+              ? 'Conductor removido de favoritos'
+              : 'Conductor agregado a favoritos',
+        ),
+      ),
+    );
   }
 
   Future<void> _checkConductorStatus() async {
@@ -53,73 +105,81 @@ class _ViajesRecientesState extends State<ViajesRecientes> {
     final conductorId = prefs.getInt('conductor_id');
 
     if (conductorId != null) {
-      final url = Uri.parse("https://fimeride.onrender.com/api/conductor_estado/$conductorId/");
+      final url = Uri.parse(
+        "https://fimeride.onrender.com/api/conductor_estado/$conductorId/",
+      );
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
         setState(() {
-          _isConductorEnabled = responseData['activo']; // Habilita el switch si el conductor está activo
+          _isConductorEnabled =
+              responseData['activo']; // Habilita el switch si el conductor está activo
         });
       }
     }
   }
-  
+
   Future<void> _fetchViajesPasajero() async {
-  final prefs = await SharedPreferences.getInstance();
-  final pasajeroId = prefs.getInt('pasajero_id');
+    final prefs = await SharedPreferences.getInstance();
+    final pasajeroId = prefs.getInt('pasajero_id');
 
-  if (pasajeroId == null) {
-    _showErrorDialog(context, "Error: No se encontró el ID del pasajero.");
-    return;
-  }
-
-  final url = Uri.parse("https://fimeride.onrender.com/api/viajes_realizados/pasajero/$pasajeroId/");
-
-  try {
-    final response = await http.get(url);
-
-    if (response.statusCode == 200) {
-      final responseData = jsonDecode(response.body);
-      setState(() {
-        _viajesPasajero = responseData is List ? responseData : [];
-      });
-    } else {
-      _showErrorDialog(context, "Error al obtener los viajes como pasajero.");
+    if (pasajeroId == null) {
+      _showErrorDialog(context, "Error: No se encontró el ID del pasajero.");
+      return;
     }
-  } catch (e) {
-    _showErrorDialog(context, "Error de conexión: $e");
-  }
-}
 
-Future<void> _fetchViajesConductor() async {
-  final prefs = await SharedPreferences.getInstance();
-  final conductorId = prefs.getInt('conductor_id');
+    final url = Uri.parse(
+      "https://fimeride.onrender.com/api/viajes_realizados/pasajero/$pasajeroId/",
+    );
 
-  if (conductorId == null) {
-    _showErrorDialog(context, "Error: No se encontró el ID del conductor.");
-    return;
-  }
+    try {
+      final response = await http.get(url);
 
-  final url = Uri.parse("https://fimeride.onrender.com/api/viajes_realizados/conductor/$conductorId/");
-
-  try {
-    final response = await http.get(url);
-
-    if (response.statusCode == 200) {
-      final responseData = jsonDecode(response.body);
-      setState(() {
-        _viajesConductor = responseData is List ? responseData : [];
-      });
-    } else {
-      _showErrorDialog(context, "Error al obtener los viajes como conductor.");
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        setState(() {
+          _viajesPasajero = responseData is List ? responseData : [];
+        });
+      } else {
+        _showErrorDialog(context, "Error al obtener los viajes como pasajero.");
+      }
+    } catch (e) {
+      _showErrorDialog(context, "Error de conexión: $e");
     }
-  } catch (e) {
-    _showErrorDialog(context, "Error de conexión: $e");
   }
-}
 
+  Future<void> _fetchViajesConductor() async {
+    final prefs = await SharedPreferences.getInstance();
+    final conductorId = prefs.getInt('conductor_id');
 
+    if (conductorId == null) {
+      _showErrorDialog(context, "Error: No se encontró el ID del conductor.");
+      return;
+    }
+
+    final url = Uri.parse(
+      "https://fimeride.onrender.com/api/viajes_realizados/conductor/$conductorId/",
+    );
+
+    try {
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        setState(() {
+          _viajesConductor = responseData is List ? responseData : [];
+        });
+      } else {
+        _showErrorDialog(
+          context,
+          "Error al obtener los viajes como conductor.",
+        );
+      }
+    } catch (e) {
+      _showErrorDialog(context, "Error de conexión: $e");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -140,91 +200,120 @@ Future<void> _fetchViajesConductor() async {
 
     return Scaffold(
       drawer: Drawer(
-  child: ListView(
-    padding: EdgeInsets.zero,
-    children: [
-      DrawerHeader(
-        decoration: BoxDecoration(
-          color: Color.fromARGB(255, 0, 87, 54),
-        ),
-        child: Row(
+        child: ListView(
+          padding: EdgeInsets.zero,
           children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundImage: _fotoPerfil.startsWith('http')
-                  ? NetworkImage(_fotoPerfil)
-                  : AssetImage(_fotoPerfil) as ImageProvider,
-            ),
-            SizedBox(width: 16),
-            Text(
-              _nombreUsuario,
-              style: TextStyle(
-                fontFamily: 'ADLaMDisplay',
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+            DrawerHeader(
+              decoration: BoxDecoration(color: Color.fromARGB(255, 0, 87, 54)),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundImage:
+                        _fotoPerfil.startsWith('http')
+                            ? NetworkImage(_fotoPerfil)
+                            : AssetImage(_fotoPerfil) as ImageProvider,
+                  ),
+                  SizedBox(width: 16),
+                  Text(
+                    _nombreUsuario,
+                    style: TextStyle(
+                      fontFamily: 'ADLaMDisplay',
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
+            ),
+            ListTile(
+              leading: Icon(Icons.directions_car, color: Colors.black),
+              title: Text(
+                'Mis Viajes',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ViajesRecientes()),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.star, color: Colors.black),
+              title: Text(
+                'Favoritos',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => FavoritosScreen(),
+                  ), // Redirige a la pantalla de mensajes
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(
+                Icons.message,
+                color: Colors.black,
+              ), // Ícono de mensajes
+              title: Text(
+                'Mensajes',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ListaMensajesScreen(),
+                  ), // Redirige a la pantalla de mensajes
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.settings, color: Colors.black),
+              title: Text(
+                'Configuración',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ConfiguracionScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.help, color: Colors.green),
+              title: Text(
+                'Ayuda',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onTap: () {
+                _showAyudaDialog(context);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.logout, color: Colors.red),
+              title: Text(
+                'Cerrar Sesión',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+              onTap: () {
+                _cerrarSesion(context);
+              },
             ),
           ],
         ),
       ),
-      ListTile(
-        leading: Icon(Icons.directions_car, color: Colors.black),
-        title: Text('Mis Viajes', style: TextStyle(fontWeight: FontWeight.bold)),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => ViajesRecientes()),
-          );
-        },
-      ),
-      ListTile(
-        leading: Icon(Icons.star, color: Colors.black),
-        title: Text('Favoritos', style: TextStyle(fontWeight: FontWeight.bold)),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => FavoritosScreen()), // Redirige a la pantalla de mensajes
-          );
-        },
-      ),
-      ListTile(
-        leading: Icon(Icons.message, color: Colors.black), // Ícono de mensajes
-        title: Text('Mensajes', style: TextStyle(fontWeight: FontWeight.bold)),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => ListaMensajesScreen()), // Redirige a la pantalla de mensajes
-          );
-        },
-      ),
-      ListTile(
-        leading: Icon(Icons.settings, color: Colors.black),
-        title: Text('Configuración', style: TextStyle(fontWeight: FontWeight.bold)),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => ConfiguracionScreen()),
-          );
-        },
-      ),
-      ListTile(
-        leading: Icon(Icons.help, color: Colors.green),
-        title: Text('Ayuda', style: TextStyle(fontWeight: FontWeight.bold)),
-        onTap: () {
-          _showAyudaDialog(context);
-        },
-      ),
-      ListTile(
-        leading: Icon(Icons.logout, color: Colors.red),
-        title: Text('Cerrar Sesión', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-        onTap: () {
-          _cerrarSesion(context);
-        },
-      ),
-    ],
-  ),
-),
       body: Stack(
         children: [
           Container(
@@ -255,10 +344,7 @@ Future<void> _fetchViajesConductor() async {
                               Scaffold.of(context).openDrawer();
                             },
                             backgroundColor: Color.fromARGB(255, 0, 87, 54),
-                            child: Icon(
-                              Icons.menu,
-                              color: Colors.white,
-                            ),
+                            child: Icon(Icons.menu, color: Colors.white),
                           );
                         },
                       ),
@@ -266,28 +352,23 @@ Future<void> _fetchViajesConductor() async {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          "Pasajero",
-                          style: greenTextStyle,
-                        ),
+                        Text("Pasajero", style: greenTextStyle),
                         Switch(
                           value: _isConductor,
-                          onChanged:_isConductorEnabled 
-                            ?(value) {
-                              setState(() {
-                                _isConductor = value;
-                              });
-                            }
-                            :null,
+                          onChanged:
+                              _isConductorEnabled
+                                  ? (value) {
+                                    setState(() {
+                                      _isConductor = value;
+                                    });
+                                  }
+                                  : null,
                           activeThumbColor: Colors.white,
                           activeTrackColor: Color.fromARGB(255, 0, 87, 54),
                           inactiveThumbColor: Colors.white,
                           inactiveTrackColor: Colors.white54,
                         ),
-                        Text(
-                          "Conductor",
-                          style: greenTextStyle,
-                        ),
+                        Text("Conductor", style: greenTextStyle),
                       ],
                     ),
                     SizedBox(width: 16),
@@ -295,10 +376,11 @@ Future<void> _fetchViajesConductor() async {
                 ),
                 SizedBox(height: 16),
                 Expanded(
-                   child: _isConductor 
-                      ? _buildConductorList(greenTextStyle, buttonTextStyle) 
-                      : _buildPasajeroList(greenTextStyle),
-                  ),
+                  child:
+                      _isConductor
+                          ? _buildConductorList(greenTextStyle, buttonTextStyle)
+                          : _buildPasajeroList(greenTextStyle),
+                ),
               ],
             ),
           ),
@@ -310,7 +392,9 @@ Future<void> _fetchViajesConductor() async {
               padding: const EdgeInsets.symmetric(vertical: 16.0),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black26,
@@ -323,16 +407,24 @@ Future<void> _fetchViajesConductor() async {
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.home, color: Color.fromARGB(255, 0, 87, 54)),
+                    icon: const Icon(
+                      Icons.home,
+                      color: Color.fromARGB(255, 0, 87, 54),
+                    ),
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => PaginaPrincipal()),
+                        MaterialPageRoute(
+                          builder: (context) => PaginaPrincipal(),
+                        ),
                       );
                     },
                   ),
                   IconButton(
-                    icon: const Icon(Icons.directions_car, color: Color.fromARGB(255, 0, 87, 54)),
+                    icon: const Icon(
+                      Icons.directions_car,
+                      color: Color.fromARGB(255, 0, 87, 54),
+                    ),
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -341,7 +433,10 @@ Future<void> _fetchViajesConductor() async {
                     },
                   ),
                   IconButton(
-                    icon: const Icon(Icons.add, color: Color.fromARGB(255, 0, 87, 54)),
+                    icon: const Icon(
+                      Icons.add,
+                      color: Color.fromARGB(255, 0, 87, 54),
+                    ),
                     onPressed: () async {
                       final prefs = await SharedPreferences.getInstance();
                       final conductorId = prefs.getInt('conductor_id');
@@ -352,7 +447,9 @@ Future<void> _fetchViajesConductor() async {
                         return;
                       }
 
-                      final url = Uri.parse("https://fimeride.onrender.com/api/conductor_estado/$conductorId/");
+                      final url = Uri.parse(
+                        "https://fimeride.onrender.com/api/conductor_estado/$conductorId/",
+                      );
                       final response = await http.get(url);
 
                       if (response.statusCode == 200) {
@@ -360,27 +457,38 @@ Future<void> _fetchViajesConductor() async {
                         final isActive = responseData['activo'];
 
                         if (isActive) {
-                        // Si el conductor está activo, permite la acción normal
+                          // Si el conductor está activo, permite la acción normal
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => OfercerViaje()),
+                            MaterialPageRoute(
+                              builder: (context) => OfercerViaje(),
+                            ),
                           );
                         } else {
-                        // Si el conductor no está activo, muestra el popup
-                        _showNoPermisosDialog(context);
+                          // Si el conductor no está activo, muestra el popup
+                          _showNoPermisosDialog(context);
                         }
                       } else {
                         // Maneja errores de la solicitud
-                        _showErrorDialog(context, "Error al verificar el estado del conductor.");
+                        _showErrorDialog(
+                          context,
+                          "Error al verificar el estado del conductor.",
+                        );
                       }
                     },
                   ),
                   IconButton(
-                    icon: const Icon(Icons.group, color: Color.fromARGB(255, 0, 87, 54)),
+                    icon: const Icon(
+                      Icons.group,
+                      color: Color.fromARGB(255, 0, 87, 54),
+                    ),
                     onPressed: () {},
                   ),
                   IconButton(
-                    icon: const Icon(Icons.person, color: Color.fromARGB(255, 0, 87, 54)),
+                    icon: const Icon(
+                      Icons.person,
+                      color: Color.fromARGB(255, 0, 87, 54),
+                    ),
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -395,149 +503,199 @@ Future<void> _fetchViajesConductor() async {
         ],
       ),
     );
-
-    
   }
 
   void _showNoPermisosDialog(BuildContext context) {
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text("Permiso denegado"),
-        content: const Text(
-          "No tienes permisos de conductor. ¿Quieres enviar una solicitud para ser conductor?",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: const Text("Cancelar"),
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("Permiso denegado"),
+          content: const Text(
+            "No tienes permisos de conductor. ¿Quieres enviar una solicitud para ser conductor?",
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => FormularioConductores(usuarioId: 0)), // Ajusta según sea necesario
-              );
-            },
-            child: const Text("Enviar solicitud"),
-          ),
-        ],
-      );
-    },
-  );
-}
-
-Widget _buildPasajeroList(TextStyle greenTextStyle) {
-  if (_viajesPasajero.isEmpty) {
-    return Center(child: Text("No hay viajes realizados como pasajero.", style: greenTextStyle));
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text("Cancelar"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => FormularioConductores(usuarioId: 0),
+                  ), // Ajusta según sea necesario
+                );
+              },
+              child: const Text("Enviar solicitud"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
-  return ListView.builder(
-    itemCount: _viajesPasajero.length,
-    itemBuilder: (context, index) {
-      final viaje = _viajesPasajero[index];
-      final conductor = viaje['conductor'] ?? {};
-      final nombreConductor = conductor['nombre'] ?? "Conductor no disponible";
-      final fechaViaje = viaje['fecha_viaje'] ?? "Fecha no disponible";
-      final horaSalida = viaje['hora_salida'] ?? "Hora de salida no disponible";
-      final horaLlegada = viaje['hora_llegada'] ?? "Hora de llegada no disponible";
+  Widget _buildPasajeroList(TextStyle greenTextStyle) {
+    if (_viajesPasajero.isEmpty) {
+      return Center(
+        child: Text(
+          "No hay viajes realizados como pasajero.",
+          style: greenTextStyle,
+        ),
+      );
+    }
 
-      return Card(
-        margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 30,
-                backgroundImage: AssetImage('assets/profile_placeholder.png'),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("Conductor: $nombreConductor", style: greenTextStyle),
-                    Text("Fecha: $fechaViaje", style: greenTextStyle),
-                    Text("Salida: $horaSalida - Llegada: $horaLlegada", style: greenTextStyle),
-                  ],
+    return ListView.builder(
+      itemCount: _viajesPasajero.length,
+      itemBuilder: (context, index) {
+        final viaje = _viajesPasajero[index];
+        final conductor = viaje['conductor'] ?? {};
+        final conductorId =
+            conductor['id'] is int
+                ? conductor['id'] as int
+                : int.tryParse(conductor['id']?.toString() ?? '');
+        final nombreConductor =
+            conductor['nombre'] ?? "Conductor no disponible";
+        final conductorFoto = conductor['foto_perfil']?.toString();
+        final conductorFotoValida =
+            conductorFoto != null && conductorFoto.isNotEmpty;
+        final fechaViaje = viaje['fecha_viaje'] ?? "Fecha no disponible";
+        final horaSalida =
+            viaje['hora_salida'] ?? "Hora de salida no disponible";
+        final horaLlegada =
+            viaje['hora_llegada'] ?? "Hora de llegada no disponible";
+        final isFavorite =
+            conductorId != null && _favoriteConductorIds.contains(conductorId);
+
+        return Card(
+          margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 30,
+                  backgroundImage:
+                      conductorFotoValida
+                          ? NetworkImage(conductorFoto)
+                          : const AssetImage('assets/image/icono-perfil.png')
+                              as ImageProvider,
                 ),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
-}
-
-Widget _buildConductorList(TextStyle greenTextStyle, TextStyle buttonTextStyle) {
-  if (_viajesConductor.isEmpty) {
-    return Center(child: Text("No hay viajes realizados como conductor.", style: greenTextStyle));
-  }
-
-  return ListView.builder(
-    itemCount: _viajesConductor.length,
-    itemBuilder: (context, index) {
-      final viaje = _viajesConductor[index];
-      final fechaViaje = viaje['fecha_viaje'] ?? "Fecha no disponible";
-      final horaSalida = viaje['hora_salida'] ?? "Hora de salida no disponible";
-      final horaLlegada = viaje['hora_llegada'] ?? "Hora de llegada no disponible";
-
-      return Card(
-        margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Fecha: $fechaViaje", style: greenTextStyle),
-              Text("Salida: $horaSalida - Llegada: $horaLlegada", style: greenTextStyle),
-              SizedBox(height: 16),
-              Align(
-                alignment: Alignment.bottomRight,
-                child: ElevatedButton(
-                  onPressed: () {
-                    print("Repetir viaje");
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Color.fromARGB(255, 0, 87, 54),
+                SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Conductor: $nombreConductor",
+                        style: greenTextStyle,
+                      ),
+                      Text("Fecha: $fechaViaje", style: greenTextStyle),
+                      Text(
+                        "Salida: $horaSalida - Llegada: $horaLlegada",
+                        style: greenTextStyle,
+                      ),
+                    ],
                   ),
-                  child: Text("Repetir", style: buttonTextStyle),
                 ),
-              ),
-            ],
+                if (conductorId != null)
+                  IconButton(
+                    onPressed: () => _toggleFavoriteConductor(conductorId),
+                    icon: Icon(
+                      isFavorite ? Icons.star : Icons.star_border,
+                      color: isFavorite ? Colors.amber[700] : Colors.grey,
+                    ),
+                    tooltip: 'Agregar conductor a favoritos',
+                  ),
+              ],
+            ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildConductorList(
+    TextStyle greenTextStyle,
+    TextStyle buttonTextStyle,
+  ) {
+    if (_viajesConductor.isEmpty) {
+      return Center(
+        child: Text(
+          "No hay viajes realizados como conductor.",
+          style: greenTextStyle,
         ),
       );
-    },
-  );
-}
+    }
 
-void _showErrorDialog(BuildContext context, String message) {
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text("Error"),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: const Text("Cerrar"),
+    return ListView.builder(
+      itemCount: _viajesConductor.length,
+      itemBuilder: (context, index) {
+        final viaje = _viajesConductor[index];
+        final fechaViaje = viaje['fecha_viaje'] ?? "Fecha no disponible";
+        final horaSalida =
+            viaje['hora_salida'] ?? "Hora de salida no disponible";
+        final horaLlegada =
+            viaje['hora_llegada'] ?? "Hora de llegada no disponible";
+
+        return Card(
+          margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Fecha: $fechaViaje", style: greenTextStyle),
+                Text(
+                  "Salida: $horaSalida - Llegada: $horaLlegada",
+                  style: greenTextStyle,
+                ),
+                SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.bottomRight,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      print("Repetir viaje");
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Color.fromARGB(255, 0, 87, 54),
+                    ),
+                    child: Text("Repetir", style: buttonTextStyle),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
-      );
-    },
-  );
-}
-void _cerrarSesion(BuildContext context) {
+        );
+      },
+    );
+  }
+
+  void _showErrorDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("Error"),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text("Cerrar"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _cerrarSesion(BuildContext context) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -565,7 +723,7 @@ void _cerrarSesion(BuildContext context) {
     );
   }
 
-   void _showAyudaDialog(BuildContext context) {
+  void _showAyudaDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -593,7 +751,4 @@ void _cerrarSesion(BuildContext context) {
       },
     );
   }
-
-  
-
 }
