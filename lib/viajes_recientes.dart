@@ -7,6 +7,7 @@ import 'package:fimeride_front/info_viajes.dart';
 import 'package:fimeride_front/lista_mensajes_screen.dart';
 import 'package:fimeride_front/ofercer_viaje.dart';
 import 'package:fimeride_front/pantalla_favoritos.dart';
+import 'package:fimeride_front/pantalla_reportes.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -304,6 +305,21 @@ class _ViajesRecientesState extends State<ViajesRecientes> {
                   MaterialPageRoute(
                     builder: (context) => ListaMensajesScreen(),
                   ), // Redirige a la pantalla de mensajes
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.flag, color: Colors.black),
+              title: Text(
+                'Mis Reportes',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const PantallaReportes(),
+                  ),
                 );
               },
             ),
