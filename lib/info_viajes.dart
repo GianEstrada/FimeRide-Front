@@ -544,15 +544,47 @@ class _InfoViajesState extends State<InfoViajes> {
   ) {
     final direccion = viaje['direccion'] ?? "Dirección no disponible";
     final fecha = viaje['fecha_viaje'] ?? "Fecha no disponible";
+    final horaSalida = viaje['hora_salida'] ?? "--:--";
+    final horaLlegada = viaje['hora_llegada'] ?? "--:--";
+    final descripcion = viaje['descripcion'] ?? "Sin descripción";
+    final estadoViaje = viaje['estado_viaje'] ?? "realizado";
     final conductor =
         viaje['conductor']?['nombre'] ?? "Conductor no disponible";
+    final conductorFoto = viaje['conductor']?['foto_perfil']?.toString();
+    final conductorFotoValida =
+        conductorFoto != null && conductorFoto.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 26,
+              backgroundImage:
+                  conductorFotoValida
+                      ? NetworkImage(conductorFoto)
+                      : const AssetImage('assets/image/icono-perfil.png')
+                          as ImageProvider,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text("Conductor: $conductor", style: greenTextStyle),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          "Estado: ${estadoViaje == 'proximo' ? 'Próximo' : 'Realizado'}",
+          style: greenTextStyle.copyWith(fontWeight: FontWeight.bold),
+        ),
         Text("Dirección: $direccion", style: greenTextStyle),
         Text("Fecha: $fecha", style: greenTextStyle),
-        Text("Conductor: $conductor", style: greenTextStyle),
+        Text(
+          "Salida: $horaSalida | Llegada: $horaLlegada",
+          style: greenTextStyle,
+        ),
+        Text("Descripción: $descripcion", style: greenTextStyle),
         ElevatedButton(
           onPressed: () {
             print("Reportar viaje");
@@ -569,37 +601,62 @@ class _InfoViajesState extends State<InfoViajes> {
     TextStyle greenTextStyle,
     TextStyle buttonTextStyle,
   ) {
+    final estadoViaje = viaje['estado_viaje'] ?? 'realizado';
+    final pasajeros = (viaje['pasajeros'] as List<dynamic>? ?? const []);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          "Estado: ${estadoViaje == 'proximo' ? 'Próximo' : 'Realizado'}",
+          style: greenTextStyle.copyWith(fontWeight: FontWeight.bold),
+        ),
         Text("Dirección: ${viaje['direccion']}", style: greenTextStyle),
         Text("Fecha: ${viaje['fecha_viaje']}", style: greenTextStyle),
-        SizedBox(height: 8),
-        Row(
-          children:
-              (viaje['pasajeros'] as List<dynamic>).map((pasajero) {
-                return GestureDetector(
-                  onTap: () {
-                    _showPasajeroPopup(
-                      context,
-                      pasajero,
-                      greenTextStyle,
-                      buttonTextStyle,
-                    );
-                  },
-                  child: Column(
-                    children: [
-                      CircleAvatar(),
-                      Text(
-                        pasajero['nombre'].split(' ')[0],
-                        style: greenTextStyle,
-                      ),
-                      SizedBox(width: 8),
-                    ],
-                  ),
-                );
-              }).toList(),
+        Text(
+          "Salida: ${viaje['hora_salida'] ?? '--:--'} | Llegada: ${viaje['hora_llegada'] ?? '--:--'}",
+          style: greenTextStyle,
         ),
+        Text(
+          "Descripción: ${viaje['descripcion'] ?? 'Sin descripción'}",
+          style: greenTextStyle,
+        ),
+        Text(
+          "Pasajeros aceptados: ${pasajeros.length}",
+          style: greenTextStyle.copyWith(fontWeight: FontWeight.w600),
+        ),
+        SizedBox(height: 8),
+        if (pasajeros.isEmpty)
+          Text("Aún no hay pasajeros aceptados.", style: greenTextStyle)
+        else
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            children:
+                pasajeros.map((pasajero) {
+                  return GestureDetector(
+                    onTap: () {
+                      _showPasajeroPopup(
+                        context,
+                        pasajero,
+                        greenTextStyle,
+                        buttonTextStyle,
+                      );
+                    },
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircleAvatar(),
+                        const SizedBox(height: 4),
+                        Text(
+                          pasajero['nombre'].toString().split(' ').first,
+                          style: greenTextStyle,
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+          ),
       ],
     );
   }
@@ -611,7 +668,7 @@ class _InfoViajesState extends State<InfoViajes> {
     if (_viajesPasajero.isEmpty) {
       return Center(
         child: Text(
-          "No hay viajes realizados como pasajero.",
+          "No hay viajes para mostrar como pasajero.",
           style: greenTextStyle,
         ),
       );
@@ -639,7 +696,7 @@ class _InfoViajesState extends State<InfoViajes> {
     if (_viajesConductor.isEmpty) {
       return Center(
         child: Text(
-          "No hay viajes realizados como conductor.",
+          "No hay viajes para mostrar como conductor.",
           style: greenTextStyle,
         ),
       );
