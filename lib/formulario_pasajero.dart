@@ -19,6 +19,7 @@ class FormularioPasajero extends StatefulWidget {
 
 class _FormularioPasajeroState extends State<FormularioPasajero> {
   bool _obscurePassword = true;
+  bool _isSubmitting = false;
   File? _profileImage;
   File? _frontCredentialImage;
   File? _credentialDigitalPdf;
@@ -46,6 +47,81 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
         (_frontCredentialImage != null || _credentialDigitalPdf != null) &&
         _boletaRectoria != null &&
         _aceptaTerminos;
+  }
+
+  List<String> _missingFields({bool includeCredential = true}) {
+    final missing = <String>[];
+    if (_matriculaController.text.trim().isEmpty) missing.add('Matricula');
+    if (_passwordController.text.isEmpty) missing.add('Contrasena');
+    if (_confirmPasswordController.text.isEmpty)
+      missing.add('Confirmar contrasena');
+    if (_passwordController.text.isNotEmpty &&
+        _confirmPasswordController.text.isNotEmpty &&
+        _passwordController.text != _confirmPasswordController.text) {
+      missing.add('Contrasenas coinciden');
+    }
+    if (_nombreCompletoController.text.trim().isEmpty)
+      missing.add('Nombre completo');
+    if (_correoController.text.trim().isEmpty)
+      missing.add('Correo universitario');
+    if (_profileImage == null) missing.add('Foto de perfil');
+    if (includeCredential &&
+        _frontCredentialImage == null &&
+        _credentialDigitalPdf == null) {
+      missing.add('Credencial (foto o PDF)');
+    }
+    if (_boletaRectoria == null) missing.add('Boleta de rectoria');
+    if (!_aceptaTerminos) missing.add('Aceptar terminos y condiciones');
+    return missing;
+  }
+
+  Future<void> _confirmarRegistro() async {
+    final missingGeneral = _missingFields(includeCredential: false);
+    if (missingGeneral.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Completa primero: ${missingGeneral.join(', ')}'),
+        ),
+      );
+      return;
+    }
+
+    if (_frontCredentialImage == null && _credentialDigitalPdf == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Selecciona una credencial: foto fisica o credencial digital PDF.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirmacion'),
+          content: const Text(
+            'Al hacer click en Confirmar da fe de que todos los datos son reales y propios.\n\n'
+            'Desea continuar?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _registrarUsuario();
+              },
+              child: const Text('Continuar'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   String _fileNameFromPath(String path) {
@@ -162,6 +238,7 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
         );
         setState(() {
           _credentialDigitalPdf = persisted;
+          _frontCredentialImage = null;
           _credentialDigitalPdfFileName = file.name;
         });
       } else {
@@ -306,26 +383,7 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                         style: TextStyle(color: Colors.white),
                       ),
                       SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _buildImagePicker(
-                            "Foto frontal\n de la credencial",
-                            _frontCredentialImage,
-                            (image) {
-                              setState(() {
-                                _frontCredentialImage = image;
-                              });
-                            },
-                          ),
-                          SizedBox(width: 10),
-                          _buildPdfPicker(
-                            _credentialDigitalPdfFileName,
-                            _credentialDigitalPdf,
-                            _selectCredentialDigitalPdf,
-                          ),
-                        ],
-                      ),
+                      _buildCredentialUnifiedPicker(),
                       SizedBox(height: 15),
                       Text(
                         "BOLETA DE RECTORÍA",
@@ -393,38 +451,7 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                 ),
                 SizedBox(height: 10),
                 ElevatedButton.icon(
-                  onPressed:
-                      _isFormComplete
-                          ? () {
-                            showDialog(
-                              context: context,
-                              builder: (context) {
-                                return AlertDialog(
-                                  title: Text("Confirmación"),
-                                  content: Text(
-                                    "Al hacer click en Confirmar da fe de que todos los datos son reales y propios.\n\n"
-                                    "¿Desea continuar?",
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () {
-                                        Navigator.of(context).pop();
-                                      },
-                                      child: Text("Cancelar"),
-                                    ),
-                                    TextButton(
-                                      onPressed: () {
-                                        Navigator.of(context).pop();
-                                        _registrarUsuario();
-                                      },
-                                      child: Text("Continuar"),
-                                    ),
-                                  ],
-                                );
-                              },
-                            );
-                          }
-                          : null,
+                  onPressed: _isSubmitting ? null : _confirmarRegistro,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color.fromARGB(255, 1, 91, 57),
                     foregroundColor: Colors.white,
@@ -612,10 +639,75 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
     );
   }
 
+  Widget _buildCredentialUnifiedPicker() {
+    final selectedLabel =
+        _frontCredentialImage != null
+            ? 'Credencial fisica seleccionada'
+            : (_credentialDigitalPdf != null
+                ? 'Credencial digital: $_credentialDigitalPdfFileName'
+                : 'No hay credencial seleccionada');
+
+    return Container(
+      width: MediaQuery.of(context).size.width * 0.88,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Text(
+            selectedLabel,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed:
+                      () => _handleImageSelection((image) {
+                        setState(() {
+                          _frontCredentialImage = image;
+                          _credentialDigitalPdf = null;
+                          _credentialDigitalPdfFileName =
+                              'Seleccionar credencial digital (PDF)';
+                        });
+                      }),
+                  icon: const Icon(Icons.camera_alt),
+                  label: const Text('Tomar/Subir foto'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _selectCredentialDigitalPdf,
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: const Text('Subir PDF'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _registrarUsuario() async {
-    if (!_isFormComplete) {
+    if (_isSubmitting) {
       return;
     }
+
+    final missing = _missingFields();
+    if (missing.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Faltan campos: ${missing.join(', ')}')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
 
     final url = Uri.parse('https://fimeride.onrender.com/api/registrar/');
     final request = http.MultipartRequest('POST', url);
@@ -677,6 +769,10 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Error de red: $e")));
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 }
