@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:fimeride_front/fimehub_login.dart';
 import 'package:flutter/gestures.dart';
+import 'package:path_provider/path_provider.dart';
 
 class FormularioPasajero extends StatefulWidget {
   const FormularioPasajero({super.key});
@@ -28,8 +29,10 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
 
   final TextEditingController _matriculaController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
-  final TextEditingController _nombreCompletoController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+  final TextEditingController _nombreCompletoController =
+      TextEditingController();
   final TextEditingController _correoController = TextEditingController();
 
   bool get _isFormComplete {
@@ -40,9 +43,54 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
         _nombreCompletoController.text.trim().isNotEmpty &&
         _correoController.text.trim().isNotEmpty &&
         _profileImage != null &&
-          (_frontCredentialImage != null || _credentialDigitalPdf != null) &&
+        (_frontCredentialImage != null || _credentialDigitalPdf != null) &&
         _boletaRectoria != null &&
         _aceptaTerminos;
+  }
+
+  String _fileNameFromPath(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    final parts = normalized.split('/');
+    return parts.isNotEmpty ? parts.last : 'archivo';
+  }
+
+  Future<File> _persistSelectedFile(
+    String sourcePath, {
+    required String prefix,
+  }) async {
+    final source = File(sourcePath);
+    if (!await source.exists()) {
+      throw Exception(
+        'El archivo seleccionado ya no existe. Selecciónalo de nuevo.',
+      );
+    }
+
+    final dir = await getApplicationDocumentsDirectory();
+    final originalName = _fileNameFromPath(sourcePath);
+    final extensionIndex = originalName.lastIndexOf('.');
+    final extension =
+        extensionIndex >= 0 ? originalName.substring(extensionIndex) : '';
+    final targetPath =
+        '${dir.path}/$prefix${DateTime.now().millisecondsSinceEpoch}$extension';
+    return source.copy(targetPath);
+  }
+
+  Future<void> _addMultipartFile(
+    http.MultipartRequest request,
+    String field,
+    File file,
+  ) async {
+    if (!await file.exists()) {
+      throw Exception('Falta el archivo para $field. Selecciónalo de nuevo.');
+    }
+    final bytes = await file.readAsBytes();
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        field,
+        bytes,
+        filename: _fileNameFromPath(file.path),
+      ),
+    );
   }
 
   Future<void> _handleImageSelection(Function(File) onImageSelected) async {
@@ -59,10 +107,16 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
               title: Text("Tomar foto"),
               onTap: () async {
                 Navigator.pop(context);
-                final pickedFile = await picker.pickImage(source: ImageSource.camera);
+                final pickedFile = await picker.pickImage(
+                  source: ImageSource.camera,
+                );
                 if (pickedFile != null) {
+                  final persisted = await _persistSelectedFile(
+                    pickedFile.path,
+                    prefix: 'img_',
+                  );
                   setState(() {
-                    onImageSelected(File(pickedFile.path));
+                    onImageSelected(persisted);
                   });
                 }
               },
@@ -72,10 +126,16 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
               title: Text("Seleccionar de la galería"),
               onTap: () async {
                 Navigator.pop(context);
-                final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+                final pickedFile = await picker.pickImage(
+                  source: ImageSource.gallery,
+                );
                 if (pickedFile != null) {
+                  final persisted = await _persistSelectedFile(
+                    pickedFile.path,
+                    prefix: 'img_',
+                  );
                   setState(() {
-                    onImageSelected(File(pickedFile.path));
+                    onImageSelected(persisted);
                   });
                 }
               },
@@ -96,8 +156,12 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
       final XFile? file = await openFile(acceptedTypeGroups: [typeGroup]);
 
       if (file != null) {
+        final persisted = await _persistSelectedFile(
+          file.path,
+          prefix: 'credencial_',
+        );
         setState(() {
-          _credentialDigitalPdf = File(file.path);
+          _credentialDigitalPdf = persisted;
           _credentialDigitalPdfFileName = file.name;
         });
       } else {
@@ -122,8 +186,12 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
       final XFile? file = await openFile(acceptedTypeGroups: [typeGroup]);
 
       if (file != null) {
+        final persisted = await _persistSelectedFile(
+          file.path,
+          prefix: 'boleta_',
+        );
         setState(() {
-          _boletaRectoria = File(file.path);
+          _boletaRectoria = persisted;
           _boletaFileName = file.name;
         });
       } else {
@@ -160,44 +228,65 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
               children: [
                 SizedBox(height: 20),
                 GestureDetector(
-                  onTap: () => _handleImageSelection((image) => _profileImage = image),
+                  onTap:
+                      () => _handleImageSelection(
+                        (image) => _profileImage = image,
+                      ),
                   child: Container(
                     width: screenWidth / 2.3,
                     height: screenWidth / 2.3,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
-                      image: _profileImage != null
-                          ? DecorationImage(
-                              image: FileImage(_profileImage!),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
+                      image:
+                          _profileImage != null
+                              ? DecorationImage(
+                                image: FileImage(_profileImage!),
+                                fit: BoxFit.cover,
+                              )
+                              : null,
                     ),
-                    child: _profileImage == null
-                        ? Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Center(
-                              child: Text(
-                                "Selecciona tu foto de perfil \n (Tu cara debe de estar completamente visible)",
-                                textAlign: TextAlign.center,
+                    child:
+                        _profileImage == null
+                            ? Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Center(
+                                child: Text(
+                                  "Selecciona tu foto de perfil \n (Tu cara debe de estar completamente visible)",
+                                  textAlign: TextAlign.center,
+                                ),
                               ),
-                            ),
-                          )
-                        : null,
+                            )
+                            : null,
                   ),
                 ),
                 SizedBox(height: 10),
                 _buildInputSection("MATRICULA", _matriculaController, false),
 
                 SizedBox(height: 15),
-                _buildInputSectionPassword("CONTRASEÑA", _passwordController, _obscurePassword),
+                _buildInputSectionPassword(
+                  "CONTRASEÑA",
+                  _passwordController,
+                  _obscurePassword,
+                ),
                 SizedBox(height: 15),
-                _buildInputSectionPassword("CONFIRME CONTRASEÑA", _confirmPasswordController, _obscurePassword),
+                _buildInputSectionPassword(
+                  "CONFIRME CONTRASEÑA",
+                  _confirmPasswordController,
+                  _obscurePassword,
+                ),
                 SizedBox(height: 15),
-                _buildInputSection("NOMBRE COMPLETO", _nombreCompletoController, false),
+                _buildInputSection(
+                  "NOMBRE COMPLETO",
+                  _nombreCompletoController,
+                  false,
+                ),
                 SizedBox(height: 15),
-                _buildInputSection("CORREO UNIVERSITARIO", _correoController, false),
+                _buildInputSection(
+                  "CORREO UNIVERSITARIO",
+                  _correoController,
+                  false,
+                ),
                 SizedBox(height: 15),
                 GestureDetector(
                   onTap: () {},
@@ -220,14 +309,21 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _buildImagePicker("Foto frontal\n de la credencial", _frontCredentialImage,
-                              (image) {
-                            setState(() {
-                              _frontCredentialImage = image;
-                            });
-                          }),
+                          _buildImagePicker(
+                            "Foto frontal\n de la credencial",
+                            _frontCredentialImage,
+                            (image) {
+                              setState(() {
+                                _frontCredentialImage = image;
+                              });
+                            },
+                          ),
                           SizedBox(width: 10),
-                          _buildPdfPicker(_credentialDigitalPdfFileName, _credentialDigitalPdf, _selectCredentialDigitalPdf),
+                          _buildPdfPicker(
+                            _credentialDigitalPdfFileName,
+                            _credentialDigitalPdf,
+                            _selectCredentialDigitalPdf,
+                          ),
                         ],
                       ),
                       SizedBox(height: 15),
@@ -240,11 +336,15 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                         ),
                       ),
                       SizedBox(height: 10),
-                      _buildPdfPicker(_boletaFileName, _boletaRectoria, _selectPdf),
+                      _buildPdfPicker(
+                        _boletaFileName,
+                        _boletaRectoria,
+                        _selectPdf,
+                      ),
                     ],
                   ),
                 ),
-                 Padding(
+                Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 30.0),
                   child: Row(
                     children: [
@@ -271,15 +371,18 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                                   decoration: TextDecoration.underline,
                                   fontWeight: FontWeight.bold,
                                 ),
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap = () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => const terminos_condiciones(), // o terminos_condiciones()
-                                      ),
-                                    );
-                                  },
+                                recognizer:
+                                    TapGestureRecognizer()
+                                      ..onTap = () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (context) =>
+                                                    const terminos_condiciones(), // o terminos_condiciones()
+                                          ),
+                                        );
+                                      },
                               ),
                             ],
                           ),
@@ -290,37 +393,38 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
                 ),
                 SizedBox(height: 10),
                 ElevatedButton.icon(
-                  onPressed: _isFormComplete
-                      ? () {
-                    showDialog(
-                      context: context,
-                      builder: (context) {
-                        return AlertDialog(
-                          title: Text("Confirmación"),
-                          content: Text(
-                            "Al hacer click en Confirmar da fe de que todos los datos son reales y propios.\n\n"
-                            "¿Desea continuar?",
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.of(context).pop();
+                  onPressed:
+                      _isFormComplete
+                          ? () {
+                            showDialog(
+                              context: context,
+                              builder: (context) {
+                                return AlertDialog(
+                                  title: Text("Confirmación"),
+                                  content: Text(
+                                    "Al hacer click en Confirmar da fe de que todos los datos son reales y propios.\n\n"
+                                    "¿Desea continuar?",
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                      },
+                                      child: Text("Cancelar"),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                        _registrarUsuario();
+                                      },
+                                      child: Text("Continuar"),
+                                    ),
+                                  ],
+                                );
                               },
-                              child: Text("Cancelar"),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.of(context).pop();
-                                _registrarUsuario();
-                              },
-                              child: Text("Continuar"),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  }
-                      : null,
+                            );
+                          }
+                          : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color.fromARGB(255, 1, 91, 57),
                     foregroundColor: Colors.white,
@@ -356,7 +460,11 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
     );
   }
 
-  Widget _buildInputSection(String label, TextEditingController controller, bool obscureText) {
+  Widget _buildInputSection(
+    String label,
+    TextEditingController controller,
+    bool obscureText,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -379,7 +487,10 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(vertical: 10.0, horizontal: 15.0),
+              contentPadding: EdgeInsets.symmetric(
+                vertical: 10.0,
+                horizontal: 15.0,
+              ),
             ),
           ),
         ),
@@ -387,7 +498,11 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
     );
   }
 
-  Widget _buildInputSectionPassword(String label, TextEditingController controller, bool obscureText) {
+  Widget _buildInputSectionPassword(
+    String label,
+    TextEditingController controller,
+    bool obscureText,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -410,7 +525,10 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(vertical: 10.0, horizontal: 15.0),
+              contentPadding: EdgeInsets.symmetric(
+                vertical: 10.0,
+                horizontal: 15.0,
+              ),
               suffixIcon: IconButton(
                 icon: Icon(
                   obscureText ? Icons.visibility_off : Icons.visibility,
@@ -429,7 +547,11 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
     );
   }
 
-  Widget _buildImagePicker(String label, File? imageFile, Function(File) onImageSelected) {
+  Widget _buildImagePicker(
+    String label,
+    File? imageFile,
+    Function(File) onImageSelected,
+  ) {
     return GestureDetector(
       onTap: () => _handleImageSelection(onImageSelected),
       child: Container(
@@ -439,29 +561,32 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
           color: Colors.white,
           shape: BoxShape.rectangle,
           borderRadius: BorderRadius.circular(12),
-          image: imageFile != null
-              ? DecorationImage(
-                  image: FileImage(imageFile),
-                  fit: BoxFit.cover,
-                )
-              : null,
+          image:
+              imageFile != null
+                  ? DecorationImage(
+                    image: FileImage(imageFile),
+                    fit: BoxFit.cover,
+                  )
+                  : null,
         ),
-        child: imageFile == null
-            ? Padding(
-                padding: EdgeInsets.all(12),
-                child: Center(
-                  child: Text(
-                    label,
-                    textAlign: TextAlign.center,
+        child:
+            imageFile == null
+                ? Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Center(
+                    child: Text(label, textAlign: TextAlign.center),
                   ),
-                ),
-              )
-            : null,
+                )
+                : null,
       ),
     );
   }
 
-  Widget _buildPdfPicker(String label, File? pdfFile, Function() onPdfSelected) {
+  Widget _buildPdfPicker(
+    String label,
+    File? pdfFile,
+    Function() onPdfSelected,
+  ) {
     return GestureDetector(
       onTap: onPdfSelected,
       child: Container(
@@ -488,62 +613,70 @@ class _FormularioPasajeroState extends State<FormularioPasajero> {
   }
 
   Future<void> _registrarUsuario() async {
-  if (!_isFormComplete) {
-    return;
-  }
+    if (!_isFormComplete) {
+      return;
+    }
 
-  final url = Uri.parse('https://fimeride.onrender.com/api/registrar/');
-  final request = http.MultipartRequest('POST', url);
+    final url = Uri.parse('https://fimeride.onrender.com/api/registrar/');
+    final request = http.MultipartRequest('POST', url);
 
-  request.fields['nombre_completo'] = _nombreCompletoController.text;
-  request.fields['correo_universitario'] = _correoController.text;
-  request.fields['matricula'] = _matriculaController.text;
-  request.fields['contraseña'] = _passwordController.text;
-  request.fields['solicito_conductor'] = 'false';
+    request.fields['nombre_completo'] = _nombreCompletoController.text;
+    request.fields['correo_universitario'] = _correoController.text;
+    request.fields['matricula'] = _matriculaController.text;
+    request.fields['contraseña'] = _passwordController.text;
+    request.fields['solicito_conductor'] = 'false';
 
-  if (_profileImage != null) {
-    request.files.add(await http.MultipartFile.fromPath('foto_perfil', _profileImage!.path));
-  }
-  if (_frontCredentialImage != null) {
-    request.files.add(await http.MultipartFile.fromPath('credencial_frontal', _frontCredentialImage!.path));
-  }
-  if (_credentialDigitalPdf != null) {
-    request.files.add(await http.MultipartFile.fromPath('credencial_digital_pdf', _credentialDigitalPdf!.path));
-  }
-  if (_boletaRectoria != null) {
-    request.files.add(await http.MultipartFile.fromPath('boleta_rectoria', _boletaRectoria!.path));
-  }
-
-  try {
-    final response = await request.send();
-    final responseBody = await response.stream.bytesToString();
-
-    if (response.statusCode == 201) {
-      String mensaje = "Registro exitoso";
-      try {
-        final data = jsonDecode(responseBody);
-        if (data is Map<String, dynamic> && data['message'] is String) {
-          mensaje = data['message'];
-        }
-      } catch (_) {}
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(mensaje)),
-      );
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const FimeHubLogin()),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error al registrar: $responseBody")),
+    if (_profileImage != null) {
+      await _addMultipartFile(request, 'foto_perfil', _profileImage!);
+    }
+    if (_frontCredentialImage != null) {
+      await _addMultipartFile(
+        request,
+        'credencial_frontal',
+        _frontCredentialImage!,
       );
     }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Error de red: $e")),
-    );
+    if (_credentialDigitalPdf != null) {
+      await _addMultipartFile(
+        request,
+        'credencial_digital_pdf',
+        _credentialDigitalPdf!,
+      );
+    }
+    if (_boletaRectoria != null) {
+      await _addMultipartFile(request, 'boleta_rectoria', _boletaRectoria!);
+    }
+
+    try {
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+
+      if (response.statusCode == 201) {
+        String mensaje = "Registro exitoso";
+        try {
+          final data = jsonDecode(responseBody);
+          if (data is Map<String, dynamic> && data['message'] is String) {
+            mensaje = data['message'];
+          }
+        } catch (_) {}
+
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(mensaje)));
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const FimeHubLogin()),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error al registrar: $responseBody")),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error de red: $e")));
+    }
   }
-}
 }
