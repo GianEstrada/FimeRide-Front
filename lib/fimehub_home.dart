@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:fimeride_front/fimehub_login.dart';
+import 'package:fimeride_front/live_face_match_gate.dart';
 import 'package:fimeride_front/pagina_principal.dart';
 import 'package:fimeride_front/api_service.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ class FimeHubHome extends StatefulWidget {
 class _FimeHubHomeState extends State<FimeHubHome> {
   String _nombre = 'Usuario';
   String _matricula = '';
+  int? _usuarioId;
 
   final PageController _carouselController = PageController();
   int _carouselPage = 0;
@@ -75,6 +77,7 @@ class _FimeHubHomeState extends State<FimeHubHome> {
     setState(() {
       _nombre = prefs.getString('nombre') ?? 'Usuario';
       _matricula = prefs.getString('matricula') ?? '';
+      _usuarioId = prefs.getInt('usuario_id');
     });
   }
 
@@ -99,7 +102,12 @@ class _FimeHubHomeState extends State<FimeHubHome> {
     await Future.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
 
-    await _showFaceMatchDialog();
+    final accesoPermitido = await _runFimeRideFaceMatchGate();
+    if (!accesoPermitido) {
+      if (mounted) setState(() => _launchingApp = false);
+      return;
+    }
+
     if (!mounted) return;
 
     await Navigator.push(
@@ -110,12 +118,24 @@ class _FimeHubHomeState extends State<FimeHubHome> {
     if (mounted) setState(() => _launchingApp = false);
   }
 
-  Future<void> _showFaceMatchDialog() async {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (_) => const _FaceMatchPreviewDialog(),
+  Future<bool> _runFimeRideFaceMatchGate() async {
+    if (_usuarioId == null) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se encontro usuario para validar identidad'),
+        ),
+      );
+      return false;
+    }
+
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LiveFaceMatchGate(usuarioId: _usuarioId!),
+      ),
     );
+    return ok == true;
   }
 
   void _cerrarSesion() async {
@@ -752,19 +772,20 @@ class _ComparandoDialogState extends State<_ComparandoDialog> {
           children: [
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
-              child: _aceptado
-                  ? const Icon(
-                      Icons.check_circle_rounded,
-                      key: ValueKey('accepted'),
-                      size: 58,
-                      color: Color(0xFF0B8A54),
-                    )
-                  : const SizedBox(
-                      key: ValueKey('loading'),
-                      width: 46,
-                      height: 46,
-                      child: CircularProgressIndicator(strokeWidth: 4),
-                    ),
+              child:
+                  _aceptado
+                      ? const Icon(
+                        Icons.check_circle_rounded,
+                        key: ValueKey('accepted'),
+                        size: 58,
+                        color: Color(0xFF0B8A54),
+                      )
+                      : const SizedBox(
+                        key: ValueKey('loading'),
+                        width: 46,
+                        height: 46,
+                        child: CircularProgressIndicator(strokeWidth: 4),
+                      ),
             ),
             const SizedBox(height: 16),
             Text(
