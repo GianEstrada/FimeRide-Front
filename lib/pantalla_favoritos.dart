@@ -23,25 +23,11 @@ class _FavoritosScreenState extends State<FavoritosScreen> {
   String _fotoPerfil = 'assets/image/icono-perfil';
   String _nombreUsuario =
       'Usuario'; // Índice seleccionado para el menú inferior
+  int? _usuarioId;
   bool _isConductor = false;
   bool _isConductorEnabled = false;
-  final List<Map<String, String>> _favoritosDemo = const [
-    {
-      'nombre': 'Conductor Demo 1',
-      'ruta': 'San Nicolas -> FIME',
-      'horario': 'Lunes a Viernes 07:30',
-    },
-    {
-      'nombre': 'Conductor Demo 2',
-      'ruta': 'Apodaca -> FIME',
-      'horario': 'Lunes, Miercoles, Viernes 08:10',
-    },
-    {
-      'nombre': 'Conductor Demo 3',
-      'ruta': 'FIME -> Guadalupe',
-      'horario': 'Martes y Jueves 18:20',
-    },
-  ];
+  bool _isLoadingFavoritos = true;
+  List<dynamic> _favoritos = [];
 
   @override
   void initState() {
@@ -53,6 +39,7 @@ class _FavoritosScreenState extends State<FavoritosScreen> {
   Future<void> _fetchUsuarioInfo() async {
     final prefs = await SharedPreferences.getInstance();
     final nombre = prefs.getString('nombre');
+    final usuarioId = prefs.getInt('usuario_id');
     print("Nombre recuperado de SharedPreferences: $nombre");
 
     setState(() {
@@ -60,7 +47,50 @@ class _FavoritosScreenState extends State<FavoritosScreen> {
           prefs.getString('foto_perfil') ?? 'assets/default_avatar.png';
       _nombreUsuario =
           nombre?.split(' ')[0] ?? 'Usuario'; // Solo el primer nombre
+      _usuarioId = usuarioId;
     });
+
+    await _fetchFavoritos();
+  }
+
+  Future<void> _fetchFavoritos() async {
+    if (_usuarioId == null) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingFavoritos = false;
+        _favoritos = [];
+      });
+      return;
+    }
+
+    final url = Uri.parse(
+      'https://fimeride.onrender.com/api/favoritos/conductores/$_usuarioId/',
+    );
+
+    try {
+      final response = await http.get(url);
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _favoritos = data is List ? data : [];
+          _isLoadingFavoritos = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _favoritos = [];
+        _isLoadingFavoritos = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _favoritos = [];
+        _isLoadingFavoritos = false;
+      });
+    }
   }
 
   Future<void> _checkConductorStatus() async {
@@ -279,48 +309,72 @@ class _FavoritosScreenState extends State<FavoritosScreen> {
                 ),
                 const SizedBox(height: 14),
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    itemCount: _favoritosDemo.length,
-                    itemBuilder: (context, index) {
-                      final favorito = _favoritosDemo[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x22000000),
-                              blurRadius: 8,
-                              offset: Offset(0, 3),
+                  child:
+                      _isLoadingFavoritos
+                          ? const Center(child: CircularProgressIndicator())
+                          : _favoritos.isEmpty
+                          ? const Center(
+                            child: Text(
+                              'No tienes conductores favoritos todavía',
+                              style: TextStyle(color: Colors.white),
                             ),
-                          ],
-                        ),
-                        child: ListTile(
-                          leading: const CircleAvatar(
-                            backgroundColor: Color.fromARGB(255, 0, 162, 100),
-                            child: Icon(Icons.star, color: Colors.white),
+                          )
+                          : ListView.builder(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            itemCount: _favoritos.length,
+                            itemBuilder: (context, index) {
+                              final favorito = _favoritos[index];
+                              final nombre =
+                                  favorito['conductor_nombre']?.toString() ??
+                                  'Conductor';
+                              final telefono =
+                                  favorito['conductor_telefono']?.toString() ??
+                                  'Sin telefono';
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x22000000),
+                                      blurRadius: 8,
+                                      offset: Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: ListTile(
+                                  leading: const CircleAvatar(
+                                    backgroundColor: Color.fromARGB(
+                                      255,
+                                      0,
+                                      162,
+                                      100,
+                                    ),
+                                    child: Icon(
+                                      Icons.star,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    nombre,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  subtitle: Text('Telefono: $telefono'),
+                                  trailing: const Icon(
+                                    Icons.favorite,
+                                    color: Color.fromARGB(255, 214, 51, 98),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
-                          title: Text(
-                            favorito['nombre'] ?? 'Favorito',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            '${favorito['ruta']}\n${favorito['horario']}',
-                          ),
-                          isThreeLine: true,
-                          trailing: const Icon(
-                            Icons.favorite,
-                            color: Color.fromARGB(255, 214, 51, 98),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
                 ),
               ],
             ),

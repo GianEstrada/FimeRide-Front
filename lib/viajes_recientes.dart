@@ -55,49 +55,83 @@ class _ViajesRecientesState extends State<ViajesRecientes> {
     await _loadFavoriteConductores();
   }
 
-  String _favoritesKey() => 'fav_conductores_${_usuarioId ?? 0}';
-
   Future<void> _loadFavoriteConductores() async {
     if (_usuarioId == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getStringList(_favoritesKey()) ?? <String>[];
-    final ids = raw.map((item) => int.tryParse(item)).whereType<int>().toSet();
-    if (!mounted) return;
-    setState(() {
-      _favoriteConductorIds = ids;
-    });
+    final url = Uri.parse(
+      'https://fimeride.onrender.com/api/favoritos/conductores/$_usuarioId/',
+    );
+    try {
+      final response = await http.get(url);
+      if (response.statusCode != 200) return;
+
+      final body = jsonDecode(response.body);
+      if (body is! List) return;
+
+      final ids = body
+          .map((item) => int.tryParse(item['conductor_usuario_id']?.toString() ?? ''))
+          .whereType<int>()
+          .toSet();
+
+      if (!mounted) return;
+      setState(() {
+        _favoriteConductorIds = ids;
+      });
+    } catch (_) {}
   }
 
   Future<void> _toggleFavoriteConductor(int conductorUsuarioId) async {
     if (_usuarioId == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    final nuevos = Set<int>.from(_favoriteConductorIds);
-    final wasFavorite = nuevos.contains(conductorUsuarioId);
-    if (wasFavorite) {
-      nuevos.remove(conductorUsuarioId);
-    } else {
-      nuevos.add(conductorUsuarioId);
-    }
-
-    await prefs.setStringList(
-      _favoritesKey(),
-      nuevos.map((id) => id.toString()).toList(),
+    final wasFavorite = _favoriteConductorIds.contains(conductorUsuarioId);
+    final url = Uri.parse(
+      'https://fimeride.onrender.com/api/favoritos/conductores/toggle/',
     );
 
-    if (!mounted) return;
-    setState(() {
-      _favoriteConductorIds = nuevos;
-    });
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'usuario_id': _usuarioId,
+          'conductor_usuario_id': conductorUsuarioId,
+          'favorito': !wasFavorite,
+        }),
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          wasFavorite
-              ? 'Conductor removido de favoritos'
-              : 'Conductor agregado a favoritos',
+      if (response.statusCode != 200) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo actualizar favorito')),
+        );
+        return;
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final esFavorito = data['es_favorito'] == true;
+
+      if (!mounted) return;
+      setState(() {
+        if (esFavorito) {
+          _favoriteConductorIds.add(conductorUsuarioId);
+        } else {
+          _favoriteConductorIds.remove(conductorUsuarioId);
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            esFavorito
+                ? 'Conductor agregado a favoritos'
+                : 'Conductor removido de favoritos',
+          ),
         ),
-      ),
-    );
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error de conexión al actualizar favorito')),
+      );
+    }
   }
 
   Future<void> _checkConductorStatus() async {
