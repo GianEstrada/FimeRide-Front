@@ -34,7 +34,9 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
     double screenWidth = MediaQuery.of(context).size.width;
     bool isKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
     double imagePosition =
-        isKeyboardVisible ? screenHeight / 10 : (screenHeight / 5) - (screenWidth / 2.6);
+        isKeyboardVisible
+            ? screenHeight / 10
+            : (screenHeight / 5) - (screenWidth / 2.6);
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -105,8 +107,10 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
                             filled: true,
                             fillColor: Colors.white,
                             border: OutlineInputBorder(),
-                            contentPadding:
-                                EdgeInsets.symmetric(vertical: 10.0, horizontal: 15.0),
+                            contentPadding: EdgeInsets.symmetric(
+                              vertical: 10.0,
+                              horizontal: 15.0,
+                            ),
                           ),
                         ),
                       ),
@@ -142,7 +146,9 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
                             fillColor: Colors.white,
                             border: const OutlineInputBorder(),
                             contentPadding: const EdgeInsets.symmetric(
-                                vertical: 10.0, horizontal: 15.0),
+                              vertical: 10.0,
+                              horizontal: 15.0,
+                            ),
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscurePassword
@@ -150,8 +156,10 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
                                     : Icons.visibility,
                                 color: Colors.black54,
                               ),
-                              onPressed: () =>
-                                  setState(() => _obscurePassword = !_obscurePassword),
+                              onPressed:
+                                  () => setState(
+                                    () => _obscurePassword = !_obscurePassword,
+                                  ),
                             ),
                           ),
                         ),
@@ -172,8 +180,12 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
                           color: Colors.white,
                           fontFamily: 'ADLaMDisplay',
                         ),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () => _showInfoDialog('Agregar una apertura de vista de formulario'),
+                        recognizer:
+                            TapGestureRecognizer()
+                              ..onTap =
+                                  () => _showInfoDialog(
+                                    'Agregar una apertura de vista de formulario',
+                                  ),
                       ),
                     ),
                   ),
@@ -215,7 +227,9 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
                         onPressed: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const FormularioPasajero()),
+                            MaterialPageRoute(
+                              builder: (context) => const FormularioPasajero(),
+                            ),
                           );
                         },
                         style: ElevatedButton.styleFrom(
@@ -230,7 +244,10 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
                             width: screenWidth * .008,
                           ),
                         ),
-                        icon: const Icon(Icons.app_registration, color: Colors.white),
+                        icon: const Icon(
+                          Icons.app_registration,
+                          color: Colors.white,
+                        ),
                         label: Text(
                           'Registrarse',
                           style: TextStyle(
@@ -291,6 +308,10 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
         if (data['nombre'] != null) {
           await prefs.setString('nombre', data['nombre']);
         }
+        if (data['foto_perfil'] != null &&
+            data['foto_perfil'].toString().isNotEmpty) {
+          await prefs.setString('foto_perfil', data['foto_perfil'].toString());
+        }
 
         if (!mounted) return;
         Navigator.pushReplacement(
@@ -298,8 +319,10 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
           MaterialPageRoute(builder: (_) => const FimeHubHome()),
         );
       } else if (response.statusCode == 403) {
-        _showDialog('Error',
-            'No se le ha aprobado la solicitud. Revise su correo universitario.');
+        _showDialog(
+          'Error',
+          'No se le ha aprobado la solicitud. Revise su correo universitario.',
+        );
       } else if (response.statusCode == 401) {
         _showDialog('Error', 'Credenciales incorrectas');
       } else {
@@ -313,32 +336,34 @@ class _FimeHubLoginState extends State<FimeHubLogin> {
   void _showDialog(String title, String message) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cerrar'),
+      builder:
+          (_) => AlertDialog(
+            title: Text(title),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cerrar'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
   void _showInfoDialog(String message) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Información'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cerrar'),
+      builder:
+          (_) => AlertDialog(
+            title: const Text('Información'),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cerrar'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }
